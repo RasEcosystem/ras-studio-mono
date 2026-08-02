@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasStudio.Application", "src\RasStudio.Application\RasStudio.Application.csproj", "{9EC8CAE0-B463-445B-9CD6-14E2B7773774}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasStudio.Web", "src\RasStudio.Web\RasStudio.Web.csproj", "{50D65C69-6BCB-43B3-B82E-1D3B9FDD92C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasStudio.Infrastructure", "src\RasStudio.Infrastructure\RasStudio.Infrastructure.csproj", "{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9EC8CAE0-B463-445B-9CD6-14E2B7773774}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9EC8CAE0-B463-445B-9CD6-14E2B7773774}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9EC8CAE0-B463-445B-9CD6-14E2B7773774}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9EC8CAE0-B463-445B-9CD6-14E2B7773774}.Release|Any CPU.Build.0 = Release|Any CPU
+		{50D65C69-6BCB-43B3-B82E-1D3B9FDD92C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{50D65C69-6BCB-43B3-B82E-1D3B9FDD92C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{50D65C69-6BCB-43B3-B82E-1D3B9FDD92C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{50D65C69-6BCB-43B3-B82E-1D3B9FDD92C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

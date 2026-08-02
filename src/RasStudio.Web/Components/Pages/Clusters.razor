@@ -1,0 +1,50 @@
+@page "/clusters"
+
+<RasStudioPageTitle Title="Clusters"/>
+
+<MudContainer MaxWidth="MaxWidth.False"
+              Style="max-width: 2240px;"
+              Class="py-8">
+
+    <MudStack Spacing="6">
+
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h3">
+                Clusters
+            </MudText>
+
+            <MudText Typo="Typo.subtitle1"
+                     Color="Color.Secondary">
+                Browse clusters discovered through connected RasGate instances
+            </MudText>
+        </MudStack>
+
+        <MudDivider/>
+
+        <MudPaper Class="pa-8"
+                  Elevation="1">
+
+            <MudStack AlignItems="AlignItems.Center"
+                      Spacing="2">
+
+                <MudIcon Icon="material-symbols-outlined/storage"
+                         Size="Size.Large"
+                         Color="Color.Secondary"/>
+
+                <MudText Typo="Typo.h6">
+                    No clusters discovered
+                </MudText>
+
+                <MudText Typo="Typo.body2"
+                         Color="Color.Secondary"
+                         Align="Align.Center">
+                    Synchronized 1C:Enterprise clusters will appear here.
+                </MudText>
+
+            </MudStack>
+
+        </MudPaper>
+
+    </MudStack>
+
+</MudContainer>

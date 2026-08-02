@@ -1,0 +1,115 @@
+@page "/"
+
+<RasStudioPageTitle Title="Dashboard"/>
+
+<MudContainer MaxWidth="MaxWidth.False"
+              Style="max-width: 2240px;"
+              Class="py-8">
+
+    <MudStack Spacing="6">
+
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h3">
+                Dashboard
+            </MudText>
+
+            <MudText Typo="Typo.subtitle1"
+                     Color="Color.Secondary">
+                Overview of your 1C:Enterprise server infrastructure
+            </MudText>
+        </MudStack>
+
+        <MudDivider/>
+
+        <MudGrid Spacing="3">
+
+            @foreach (var metric in DashboardMetrics)
+            {
+                <MudItem xs="12" sm="6" lg="3">
+                    <MudPaper Class="pa-5"
+                              Style="height: 100%;"
+                              Elevation="1">
+
+                        <MudStack Spacing="3"
+                                  Style="height: 100%;">
+
+                            <MudStack Row
+                                      AlignItems="AlignItems.Center"
+                                      Spacing="2">
+
+                                <MudAvatar Color="@metric.Color"
+                                           Variant="Variant.Outlined"
+                                           Size="Size.Medium">
+
+                                    <MudIcon Icon="@metric.Icon"/>
+
+                                </MudAvatar>
+
+                                <MudText Typo="Typo.subtitle1">
+                                    @metric.Title
+                                </MudText>
+
+                            </MudStack>
+
+                            <MudText Typo="Typo.h3">
+                                @metric.Value
+                            </MudText>
+
+                            <MudText Typo="Typo.body2"
+                                     Color="Color.Secondary">
+                                @metric.Description
+                            </MudText>
+
+                        </MudStack>
+
+                    </MudPaper>
+                </MudItem>
+            }
+
+        </MudGrid>
+
+    </MudStack>
+
+</MudContainer>
+
+@code {
+
+    private static readonly IReadOnlyList<DashboardMetric> DashboardMetrics =
+    [
+        new(
+            "RasGate Instances",
+            "0",
+            "Connected administration gateways",
+            "material-symbols-outlined/settings_ethernet",
+            Color.Primary),
+
+        new(
+            "Clusters",
+            "0",
+            "Discovered 1C:Enterprise clusters",
+            "material-symbols-outlined/storage",
+            Color.Primary),
+
+        new(
+            "Infobases",
+            "0",
+            "Discovered information bases",
+            "material-symbols-outlined/database",
+            Color.Primary),
+
+        new(
+            "Sync Issues",
+            "0",
+            "Synchronization errors requiring attention",
+            "material-symbols-outlined/sync_problem",
+            Color.Primary)
+    ];
+
+    private sealed record DashboardMetric(
+        string Title,
+        string Value,
+        string Description,
+        string Icon,
+        Color Color);
+
+}
