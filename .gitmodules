@@ -1,0 +1,3 @@
+[submodule "src/RasHub.Contracts"]
+	path = src/RasHub.Contracts
+	url = https://github.com/zmaxb/ras-hub-contracts.git

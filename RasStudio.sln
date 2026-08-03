@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasStudio.Web", "src\RasStu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasStudio.Infrastructure", "src\RasStudio.Infrastructure\RasStudio.Infrastructure.csproj", "{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Contracts", "src\RasHub.Contracts\src\RasHub.Contracts\RasHub.Contracts.csproj", "{C9832BB6-4BB7-4D52-84B5-8EC356E8325E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F8D31333-EA4C-4BB4-920B-7F2C9D6D9E4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9832BB6-4BB7-4D52-84B5-8EC356E8325E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9832BB6-4BB7-4D52-84B5-8EC356E8325E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9832BB6-4BB7-4D52-84B5-8EC356E8325E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9832BB6-4BB7-4D52-84B5-8EC356E8325E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
