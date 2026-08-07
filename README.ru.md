@@ -1,84 +1,81 @@
-[English](README.md) | [Русский](README.ru.md)
+[English](README.md) \| [Русский](README.ru.md)
 
-# RasStudio
+# RasStudio Mono
 
-RasStudio — открытый веб-интерфейс для централизованного управления серверной
-инфраструктурой 1С:Предприятия.
+RasStudio Mono — авторская экспериментальная реализация RasStudio для
+управления инфраструктурой RAS 1С:Предприятия.
 
-Приложение подключается к RasHub, который управляет экземплярами RasGate,
-синхронизирует сведения о кластерах и информационных базах и предоставляет
-единый API администрирования.
+Проект развивается независимо и в собственном темпе, с упором на
+простоту, эксперименты и постепенное развитие.
 
-## Интерфейс
+RasStudio Mono служит площадкой для исследования идей и альтернативных
+подходов в рамках Ras Ecosystem. Проект не стремится следовать темпу
+разработки или техническим решениям основной RasStudio.
 
-![Панель управления RasStudio](docs/img/ras-studio.png)
+> **Примечание:** RasStudio Mono — экспериментальный и незавершённый
+> проект. Некоторые возможности могут отсутствовать, быть
+> недоработанными или значительно меняться со временем.
+>
+> Основной проект RasStudio:
+> [RasStudio](https://github.com/RasEcosystem/ras-studio).
 
 ## Архитектура
 
-```text
-RasStudio → RasHub → RasGate → RAC
+``` text
+RasStudio Mono → RasHub → RasGate → RAC → RAS
 ```
 
-- **RasStudio** — веб-интерфейс управления;
-- **RasHub** — централизованный сервис управления и синхронизации;
-- **RasGate** — HTTP-шлюз для взаимодействия с Remote Administration Client.
-
-## Планируемый MVP
-
-- управление экземплярами RasGate;
-- обнаружение и синхронизация кластеров;
-- обнаружение и синхронизация информационных баз;
-- хранение состояния инфраструктуры в СУБД;
-- поддержка различных версий RAC;
-- контроль состояния синхронизации и регистрация ошибок.
+RasStudio Mono взаимодействует с инфраструктурой RAS через RasHub и
+RasGate.
 
 ## Технологический стек
 
-- .NET 10
-- Blazor Web App
-- MudBlazor
-- Entity Framework Core
-- ASP.NET Core Identity
+-   .NET 10
+-   Blazor Web App
+-   MudBlazor
+-   Entity Framework Core
+-   ASP.NET Core Identity
 
 ## Начало работы
 
-Клонируйте репозиторий вместе с сабмодулями:
+Клонируйте репозиторий вместе с его подмодулями:
 
-```bash
-git clone --recurse-submodules https://github.com/zmaxb/ras-studio.git
-cd ras-studio
+``` bash
+git clone --recurse-submodules https://github.com/RasEcosystem/ras-studio-mono.git
+cd ras-studio-mono
 ```
 
-Если репозиторий уже склонирован, инициализируйте сабмодули командой:
+Если репозиторий уже был клонирован, инициализируйте подмодули:
 
-```bash
+``` bash
 make submodules
 ```
 
-Соберите всё решение:
+Соберите решение:
 
-```bash
+``` bash
 make build
 ```
 
-Создайте self-contained single-file релиз для нужной платформы:
+Создайте автономную однофайловую сборку для текущей целевой платформы:
 
-```bash
+``` bash
 make release RID=linux-x64
 ```
 
-Через `RID` можно указать другую целевую платформу, например `linux-arm64` или
-`win-x64`. Полный список команд доступен через `make help`.
-
-## Статус
-
-🚧 Проект находится на этапе проектирования и начальной разработки.
+Через `RID` можно указать другой поддерживаемый идентификатор среды
+выполнения, например `linux-arm64` или `win-x64`. Выполните `make help`,
+чтобы увидеть все доступные команды.
 
 ## Связанные проекты
 
-- [RasGate](https://github.com/zmaxb/ras-gate) — открытый HTTP-шлюз для взаимодействия с Remote Administration Client;
-- [RasHub.Contracts](https://github.com/zmaxb/ras-hub-contracts) — общие контракты API RasHub, подключённые как Git-сабмодуль.
+-   [RasStudio](https://github.com/RasEcosystem/ras-studio) — основной
+    проект RasStudio;
+-   [RasGate](https://github.com/RasEcosystem/ras-gate) — HTTP-шлюз
+    для клиента удалённого администрирования;
+-   [RasHub](https://github.com/RasEcosystem/ras-hub-public) ---
+    централизованный API и сервис управления инфраструктурой.
 
 ## Лицензия
 
-RasStudio распространяется по лицензии [MIT](LICENSE).
+RasStudio Mono распространяется по лицензии [MIT](LICENSE).
