@@ -29,15 +29,15 @@
                     <h2>Connection interrupted</h2>
 
                     <p class="components-reconnect-eyebrow">
-                        RasStudio
+                        RasStudio Mono
                     </p>
                 </div>
 
             </header>
 
             <p class="components-reconnect-supporting">
-                Your current session is still open.
-                We’ll keep trying to restore the connection.
+                The local interface temporarily lost its connection.
+                Keep this window open while RasStudio reconnects.
             </p>
 
             <div class="components-rejoin-loader
@@ -53,31 +53,30 @@
 
             <p class="components-reconnect-first-attempt-visible
                       components-reconnect-message">
-                Rejoining the server…
+                Reconnecting to RasStudio Mono…
             </p>
 
             <p class="components-reconnect-repeated-attempt-visible
                       components-reconnect-message">
-                Rejoin failed. Trying again in
+                Still offline. Trying again in
                 <span id="components-seconds-to-next-attempt"></span>s.
             </p>
 
             <p class="components-reconnect-failed-visible
                       components-reconnect-message
                       components-reconnect-danger">
-                Failed to rejoin. Retry now or reload the page.
+                RasStudio Mono could not restore the connection. Retry now.
             </p>
 
             <p class="components-pause-visible
                       components-reconnect-message">
-                The session has been paused by the server.
+                The local session has been paused.
             </p>
 
             <p class="components-resume-failed-visible
                       components-reconnect-message
                       components-reconnect-danger">
-                Failed to resume the session.
-                Retry now or reload the page.
+                RasStudio Mono could not resume the session. Retry now.
             </p>
 
             <div class="components-reconnect-actions">

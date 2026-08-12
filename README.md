@@ -2,82 +2,114 @@
 
 # RasStudio Mono
 
-RasStudio Mono is a personal experimental implementation of RasStudio
-for managing 1C:Enterprise RAS infrastructure.
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Blazor](https://img.shields.io/badge/UI-Blazor-512BD4?logo=blazor&logoColor=white)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
+[![Electron](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Windows & Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-2563EB)](#requirements)
 
-The project is developed independently and at its own pace, with a focus
-on simplicity, experimentation, and gradual evolution.
+RasStudio Mono is an experimental cross-platform desktop application for
+managing 1C:Enterprise RAS infrastructure.
 
-RasStudio Mono serves as a playground for exploring ideas and
-alternative approaches within the Ras Ecosystem. It does not aim to
-follow the development pace or implementation decisions of the main
-RasStudio project.
+> **Note:** RasStudio Mono is an independent, experimental, alternative take on
+> the RasStudio client, not the project's primary implementation. It comes with
+> no guarantees of stability, feature completeness, or compatibility between
+> releases. Its architecture, behavior, and local data formats may change
+> without notice.
 
-> **Note:** RasStudio Mono is an experimental and incomplete project.
-> Features may be missing, unfinished, or change significantly over
-> time.
->
-> For the main RasStudio project, see
-> [RasStudio](https://github.com/RasEcosystem/ras-studio).
+![RasStudio Mono Home page running in an Electron desktop window](docs/img/ras-studio.png)
+
+## Technology stack
+
+- .NET 10 and ASP.NET Core/Kestrel — local application backend
+- Blazor Interactive Server — UI runtime
+- MudBlazor — component library
+- Electron and ElectronNET.Core — cross-platform desktop shell and packaging
+- SQLite and Nava.Settings — local application preferences
 
 ## Architecture
 
 ``` text
-RasStudio Mono → RasHub → RasGate → RAC → RAS
+Electron window → Kestrel on 127.0.0.1 → Blazor Server
+                                      ↓
+                     RasHub → RasGate → RAC → RAS
 ```
 
-RasStudio Mono communicates with RAS infrastructure through RasHub and
-RasGate.
+Application preferences are stored in one local SQLite settings database:
 
-## Technology stack
+- Windows: `%LOCALAPPDATA%\RasStudio\settings.db`
+- Linux: `$XDG_DATA_HOME/RasStudio/settings.db`, normally
+  `~/.local/share/RasStudio/settings.db`
 
--   .NET 10
--   Blazor Web App
--   MudBlazor
--   Entity Framework Core
--   ASP.NET Core Identity
+`APP_PATH` can override the settings directory for development and tests.
 
-## Getting started
+## Requirements
 
-Clone the repository together with its submodules:
+- .NET 10 SDK
+- Node.js 22 or newer
+- Windows 10/11 or a Linux distribution supported by .NET and Electron
+
+Clone the repository with its submodules:
 
 ``` bash
 git clone --recurse-submodules https://github.com/RasEcosystem/ras-studio-mono.git
 cd ras-studio-mono
 ```
 
-If the repository has already been cloned, initialize its submodules
-with:
-
-``` bash
-make submodules
-```
-
-Build the solution:
+Restore and build:
 
 ``` bash
 make build
 ```
 
-Create a self-contained single-file release for the current target
-platform:
+Run the unpackaged desktop application:
 
 ``` bash
-make release RID=linux-x64
+make run
 ```
 
-Other supported runtime identifiers can be supplied through `RID`, for
-example `linux-arm64` or `win-x64`. Run `make help` to see all available
-commands.
+ElectronNET.Core binds Kestrel to a dynamically selected loopback-only port.
+Closing the desktop window stops Electron and the backend process together.
+
+## Packaging
+
+Build a package for the current host OS:
+
+``` bash
+make package
+```
+
+Or select the target explicitly:
+
+``` bash
+make package-linux
+make package-windows
+```
+
+Linux produces an x64 AppImage. Windows produces an x64 NSIS installer and a
+portable executable. Electron packages are platform-specific: build Windows
+packages on Windows and Linux packages on Linux (or through WSL where supported
+by ElectronNET.Core). Results are written to `artifacts/desktop`.
+
+## Verification
+
+Run the full available verification suite:
+
+``` bash
+make test
+```
+
+The suite builds Release, captures all themes in desktop/mobile viewports, and
+runs a real headless Electron lifecycle check that verifies Kestrel binds only
+to `127.0.0.1` and exits when the desktop window closes.
 
 ## Related projects
 
--   [RasStudio](https://github.com/RasEcosystem/ras-studio) — main
-    RasStudio project;
--   [RasGate](https://github.com/RasEcosystem/ras-gate) — HTTP gateway
-    for the Remote Administration Client;
--   [RasHub](https://github.com/RasEcosystem/ras-hub-public) —
-    centralized API and infrastructure management service.
+- [RasStudio](https://github.com/RasEcosystem/ras-studio) — primary RAS
+  infrastructure management client
+- [RasHub](https://github.com/RasEcosystem/ras-hub-public) — centralized API
+  and infrastructure management service
+- [RasGate](https://github.com/RasEcosystem/ras-gate) — HTTP gateway for the
+  Remote Administration Client
 
 ## License
 

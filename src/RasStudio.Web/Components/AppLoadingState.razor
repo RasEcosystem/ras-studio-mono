@@ -1,0 +1,10 @@
+<div class="app-state" role="status" aria-live="polite">
+    <MudProgressCircular Indeterminate Size="Size.Medium" Color="Color.Primary"/>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        @Message
+    </MudText>
+</div>
+
+@code {
+    [Parameter] public string Message { get; set; } = "Loading…";
+}

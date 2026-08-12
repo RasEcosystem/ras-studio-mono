@@ -1,50 +1,15 @@
 @page "/ras-gates"
 
-<RasStudioPageTitle Title="RasGate Instances"/>
+<AppPageTitle Title="RasGates"/>
 
-<MudContainer MaxWidth="MaxWidth.False"
-              Style="max-width: 2240px;"
-              Class="py-8">
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="RasGates"
+              Subtitle="View gateway connections and their current status in RasHub"
+              Icon="@Icons.Material.Filled.SettingsEthernet">
 
-    <MudStack Spacing="6">
-
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.h3">
-                RasGate Instances
-            </MudText>
-
-            <MudText Typo="Typo.subtitle1"
-                     Color="Color.Secondary">
-                Manage RasGate connections and synchronization endpoints
-            </MudText>
-        </MudStack>
-
-        <MudDivider/>
-
-        <MudPaper Class="pa-8"
-                  Elevation="1">
-
-            <MudStack AlignItems="AlignItems.Center"
-                      Spacing="2">
-
-                <MudIcon Icon="material-symbols-outlined/settings_ethernet"
-                         Size="Size.Large"
-                         Color="Color.Secondary"/>
-
-                <MudText Typo="Typo.h6">
-                    No RasGate instances connected
-                </MudText>
-
-                <MudText Typo="Typo.body2"
-                         Color="Color.Secondary"
-                         Align="Align.Center">
-                    Connected RasGate instances will appear here.
-                </MudText>
-
-            </MudStack>
-
-        </MudPaper>
-
-    </MudStack>
-
-</MudContainer>
+    <MudPaper Class="app-card" Elevation="1">
+        <AppEmptyState Title="No RasGates available"
+                       Description="RasGates from the connected RasHub environment will appear here."
+                       Icon="@Icons.Material.Filled.SettingsEthernet"/>
+    </MudPaper>
+</AppPageShell>

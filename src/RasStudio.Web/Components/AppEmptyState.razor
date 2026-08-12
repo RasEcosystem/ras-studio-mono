@@ -1,0 +1,23 @@
+<div class="app-state app-state--empty">
+    <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Default"/>
+    <MudText Typo="Typo.h6">@Title</MudText>
+
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            @Description
+        </MudText>
+    }
+
+    @if (Actions is not null)
+    {
+        <div class="app-state-actions">@Actions</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = Icons.Material.Outlined.Inbox;
+    [Parameter] public string Title { get; set; } = "Nothing here yet";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

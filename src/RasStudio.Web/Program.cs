@@ -1,129 +1,139 @@
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using ElectronNET;
+using ElectronNET.API;
+using ElectronNET.API.Entities;
 using MudBlazor.Services;
 using Nava.Settings.DependencyInjection;
 using Nava.Settings.Extensions;
-using RasStudio.Application;
 using RasStudio.Application.Settings;
-using RasStudio.Web.Components;
-using RasStudio.Web.Components.Account;
-using RasStudio.Web.Data;
-using RasStudio.Web.Infrastructure;
-using RasStudio.Web.Infrastructure.Authorization;
-using RasStudio.Web.Infrastructure.Themes.Providers;
+using App = RasStudio.Web.Components.App;
 
-const string appSettingsFileName = "app-settings.db";
+const string settingsFileName = "settings.db";
 
 var builder = WebApplication.CreateBuilder(args);
 
-var appCatalogPath = ResolveAppCatalogPath();
-var appSettingsPath = Path.Combine(appCatalogPath, appSettingsFileName);
-AddSettings(builder.Services, appSettingsPath);
+var appDataPath = ResolveAppDataPath();
+Directory.CreateDirectory(appDataPath);
 
-// Add MudBlazor services
+AddSettings(builder.Services, Path.Combine(appDataPath, settingsFileName));
+
 builder.Services.AddMudServices();
-
-// Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<IdentityRedirectManager>();
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+var electronDisabled = builder.Configuration.GetValue<bool>("Desktop:DisableElectron");
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
-
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ??
-                       throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-
-builder.Services.AddIdentityCore<ApplicationUser>(options =>
-    {
-        options.SignIn.RequireConfirmedAccount = false;
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-    })
-    .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
-
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
-
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(
-        AppPolicies.ManageGlobalSettings,
-        policy => policy.RequireRole(AppRoles.Admin));
-
-builder.Services.AddSingleton<ThemeProvider>();
-
-builder.Services.AddScoped<CurrentUserAccessor>();
-builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
-builder.Services.AddScoped<UserAdministrationService>();
+if (electronDisabled)
+{
+    var diagnosticPort = builder.Configuration.GetValue<int?>("Desktop:DiagnosticPort") ?? 0;
+    builder.WebHost.UseUrls($"http://127.0.0.1:{diagnosticPort}");
+}
+else
+{
+    builder.Services.AddElectron();
+    ElectronNetRuntime.ElectronExtraArguments =
+        builder.Configuration["Desktop:ElectronArguments"] ?? string.Empty;
+    builder.UseElectron(
+        args,
+        services => CreateDesktopWindowAsync(
+            services.GetRequiredService<IConfiguration>()));
+}
 
 var app = builder.Build();
 
 await app.Services.InitializeApplicationSettingsAsync();
-await using (var scope = app.Services.CreateAsyncScope())
-{
-    var dbContext = scope.ServiceProvider
-        .GetRequiredService<ApplicationDbContext>();
 
-    await dbContext.Database.MigrateAsync();
-}
-await app.Services.InitializeAdminRoleAsync(
-    builder.Configuration);
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "base-uri 'self'; " +
+        "connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*; " +
+        "font-src 'self' data:; " +
+        "frame-ancestors 'none'; " +
+        "form-action 'self'; " +
+        "img-src 'self' data:; " +
+        "object-src 'none'; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'";
+    headers["Permissions-Policy"] =
+        "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseMigrationsEndPoint();
-}
-else
-{
-    app.UseExceptionHandler("/Error", true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
-}
+    await next();
+});
+
+if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/error", true);
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-
-app.UseHttpsRedirection();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Add additional endpoints required by the Identity /Account Razor components.
-app.MapAdditionalIdentityEndpoints();
-
 app.Run();
 
-return;
-
-string ResolveAppCatalogPath()
+static async Task CreateDesktopWindowAsync(IConfiguration configuration)
 {
-    return Environment.GetEnvironmentVariable("APP_PATH")
-           ?? AppContext.BaseDirectory;
+    Electron.WindowManager.IsQuitOnWindowAllClosed = true;
+
+    var options = new BrowserWindowOptions
+    {
+        Width = 1440,
+        Height = 960,
+        MinWidth = 900,
+        MinHeight = 640,
+        Center = true,
+        Show = false,
+        Title = "RasStudio Mono",
+        IsRunningBlazor = true,
+        BackgroundColor = "#20252B",
+        WebPreferences = new WebPreferences
+        {
+            NodeIntegration = false,
+            ContextIsolation = true,
+            Sandbox = true
+        }
+    };
+
+    if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) options.AutoHideMenuBar = true;
+
+    var mainWindow = await Electron.WindowManager.CreateWindowAsync(options);
+    var smokeTest = configuration.GetValue<bool>("Desktop:SmokeTest");
+
+    mainWindow.OnReadyToShow += () =>
+    {
+        mainWindow.Show();
+
+        if (smokeTest) _ = CloseSmokeTestWindowAsync(mainWindow);
+    };
 }
 
-void AddSettings(
-    IServiceCollection services,
-    string settingsFilePath)
+static async Task CloseSmokeTestWindowAsync(BrowserWindow window)
+{
+    await Task.Delay(TimeSpan.FromSeconds(1));
+    window.Close();
+}
+
+static string ResolveAppDataPath()
+{
+    var overridePath = Environment.GetEnvironmentVariable("APP_PATH");
+
+    if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);
+
+    var localAppData = Environment.GetFolderPath(
+        Environment.SpecialFolder.LocalApplicationData);
+
+    if (string.IsNullOrWhiteSpace(localAppData)) localAppData = AppContext.BaseDirectory;
+
+    return Path.Combine(localAppData, "RasStudio");
+}
+
+static void AddSettings(IServiceCollection services, string settingsFilePath)
 {
     services.AddSettingsWithSqlite(_ => $"Data Source={settingsFilePath}");
     services.AddRuntimeSettings<ApplicationSettings>();
-    services.AddScopedSettings<UserSettings>();
 }

@@ -1,6 +1,5 @@
 #components-reconnect-modal {
     display: none;
-    box-sizing: border-box;
     position: fixed;
     inset: 0;
     z-index: 1400;
@@ -12,11 +11,6 @@
     padding: 0;
     border: 0;
     background: transparent;
-    font-family: inherit;
-}
-
-#components-reconnect-modal * {
-    box-sizing: border-box;
 }
 
 #components-reconnect-modal::backdrop {

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512"
+     height="512"
+     viewBox="0 0 512 512"
+     role="img"
+     aria-label="RasStudio">
+    <rect width="512" height="512" rx="96" fill="#20252B"/>
+    <g transform="translate(64 64) scale(16)">
+        <path fill="#5D8FCF"
+              d="M19 4h-4L7.11 16.63 4.5 12 9 4H5L.5 12 5 20h4l7.89-12.63L19.5 12 15 20h4l4.5-8z"/>
+    </g>
+</svg>

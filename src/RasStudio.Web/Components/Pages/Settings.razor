@@ -1,307 +1,104 @@
-@page "/Settings"
-@using RasStudio.Web.Infrastructure.Authorization
-@attribute [Authorize(Policy = AppPolicies.ManageGlobalSettings)]
-@inject UserAdministrationService UserAdministrationService
+@page "/settings"
+@inject ISettingsProvider<ApplicationSettings> SettingsProvider
 @inject ISnackbar Snackbar
 @inject ILogger<Settings> Logger
 
-<RasStudioPageTitle Title="Settings"/>
+<AppPageTitle Title="Settings"/>
 
-<MudContainer MaxWidth="MaxWidth.False"
-              Style="max-width: 1600px;"
-              Class="py-8">
+<AppPageShell Width="AppPageWidth.Standard"
+              Title="Settings"
+              Subtitle="Customize RasStudio Mono on this device"
+              Icon="@Icons.Material.Filled.Settings">
 
-    <MudStack Spacing="6">
+    <MudForm Model="_settings"
+             @ref="_form"
+             ValidationDelay="0">
 
-        <MudStack Spacing="1">
-            <MudStack Row
-                      AlignItems="AlignItems.Center"
-                      Spacing="2">
+        <MudPaper Class="app-card" Elevation="1">
+            <MudStack Spacing="4">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Outlined.Palette"
+                             Size="Size.Small"
+                             Color="Color.Primary"/>
 
-                <MudIcon Icon="@Icons.Material.Filled.Settings"
-                         Size="Size.Large"
-                         Color="Color.Primary"/>
+                    <MudText Typo="Typo.h5">Appearance</MudText>
+                </MudStack>
 
-                <MudText Typo="Typo.h3">
-                    Settings
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Choose the visual theme used throughout the application.
                 </MudText>
 
+                <MudSelect T="AppTheme"
+                           Label="Theme"
+                           Variant="Variant.Outlined"
+                           FullWidth
+                           @bind-Value="_settings.Theme">
+                    <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
+                    <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
+                    <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
+                    <MudSelectItem Value="AppTheme.System">System default</MudSelectItem>
+                </MudSelect>
             </MudStack>
+        </MudPaper>
 
-            <MudText Typo="Typo.subtitle1"
-                     Color="Color.Secondary">
-                Configure application appearance and behavior
-            </MudText>
+        <MudStack Row
+                  Wrap="Wrap.Wrap"
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="mt-3">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Save"
+                       Disabled="_saving"
+                       OnClick="@SaveAsync">
+                @(_saving ? "Saving…" : "Save changes")
+            </MudButton>
         </MudStack>
+    </MudForm>
+</AppPageShell>
 
-        <MudDivider/>
-
-        <MudForm Model="_settings"
-                 @ref="_form"
-                 ValidationDelay="0">
-
-            <MudGrid Spacing="3">
-
-                <MudItem xs="12">
-                    <MudPaper Class="pa-6"
-                              Elevation="1">
-
-                        <MudStack Spacing="4">
-
-                            <MudStack Row
-                                      AlignItems="AlignItems.Center"
-                                      Spacing="1">
-
-                                <MudIcon Icon="@Icons.Material.Outlined.Palette"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-
-                                <MudText Typo="Typo.h5">
-                                    Appearance
-                                </MudText>
-
-                            </MudStack>
-
-                            <MudText Typo="Typo.body2"
-                                     Color="Color.Secondary">
-                                Choose the visual theme used throughout the application.
-                            </MudText>
-
-                            <MudSelect T="AppTheme"
-                                       Label="Theme"
-                                       Variant="Variant.Outlined"
-                                       FullWidth
-                                       @bind-Value="_settings.Theme">
-
-                                <MudSelectItem Value="AppTheme.Carbon">
-                                    Carbon
-                                </MudSelectItem>
-
-                                <MudSelectItem Value="AppTheme.Slate">
-                                    Slate
-                                </MudSelectItem>
-
-                            </MudSelect>
-
-                        </MudStack>
-
-                    </MudPaper>
-
-                    <MudStack Row
-                              Wrap="Wrap.Wrap"
-                              Justify="Justify.FlexEnd"
-                              Spacing="2"
-                              Class="mt-3">
-
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Outlined.Save"
-                                   OnClick="@SaveAsync">
-                            Save changes
-                        </MudButton>
-
-                    </MudStack>
-                </MudItem>
-
-                <MudItem xs="12">
-                    <MudPaper Class="pa-6"
-                              Elevation="1">
-
-                        <MudStack Spacing="4">
-
-                            <MudStack Row
-                                      AlignItems="AlignItems.Center"
-                                      Spacing="1">
-
-                                <MudIcon Icon="@Icons.Material.Outlined.AdminPanelSettings"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-
-                                <MudText Typo="Typo.h5">
-                                    Administrators
-                                </MudText>
-
-                            </MudStack>
-
-                            <MudText Typo="Typo.body2"
-                                     Color="Color.Secondary">
-                                Administrators can change global application settings
-                                and manage administrator access.
-                            </MudText>
-
-                            @if (_loadingUsers)
-                            {
-                                <MudProgressLinear Indeterminate
-                                                   Color="Color.Primary"/>
-                            }
-                            else
-                            {
-                                <MudTable T="UserAdministrationItem"
-                                          Items="@_users"
-                                          Hover
-                                          Striped
-                                          Bordered>
-
-                                    <HeaderContent>
-                                        <MudTh
-                                            Class="mud-theme-secondary border-r border-solid mud-border-lines-default">
-                                            User
-                                        </MudTh>
-                                        <MudTh Class="mud-theme-secondary">
-                                            Administrator
-                                        </MudTh>
-                                    </HeaderContent>
-
-                                    <RowTemplate>
-                                        <MudTd DataLabel="User">
-                                            <MudStack Row
-                                                      AlignItems="AlignItems.Center"
-                                                      Spacing="1">
-
-                                                <MudText Typo="Typo.body2">
-                                                    @context.DisplayName
-                                                </MudText>
-
-                                                @if (context.IsCurrentUser)
-                                                {
-                                                    <MudChip T="string"
-                                                             Size="Size.Small"
-                                                             Color="Color.Info"
-                                                             Variant="Variant.Outlined">
-                                                        You
-                                                    </MudChip>
-                                                }
-
-                                            </MudStack>
-                                        </MudTd>
-
-                                        <MudTd DataLabel="Administrator">
-                                            <MudSwitch T="bool"
-                                                       Value="@context.IsAdmin"
-                                                       ValueChanged="@(value => SetAdminAsync(context, value))"
-                                                       Disabled="@(_updatingUserId is not null || context.IsCurrentUser)"
-                                                       Color="Color.Primary"
-                                                       aria-label="@($"Administrator access for {context.DisplayName}")"/>
-                                        </MudTd>
-                                    </RowTemplate>
-
-                                    <NoRecordsContent>
-                                        <MudText Typo="Typo.body2"
-                                                 Color="Color.Secondary">
-                                            No users found.
-                                        </MudText>
-                                    </NoRecordsContent>
-
-                                </MudTable>
-                            }
-
-                        </MudStack>
-
-                    </MudPaper>
-                </MudItem>
-
-            </MudGrid>
-
-        </MudForm>
-
-    </MudStack>
-
-</MudContainer>
-
-@code
-{
+@code {
     private MudForm _form = null!;
-
     private ApplicationSettings _settings = new();
+    private bool _saving;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         _settings = new ApplicationSettings
         {
             Theme = SettingsProvider.Settings.Theme
         };
-
-        await LoadUsersAsync();
     }
 
     private async Task SaveAsync()
     {
+        if (_saving)
+        {
+            return;
+        }
+
+        await _form.ValidateAsync();
+
         if (!_form.IsValid)
         {
             return;
         }
 
-        await SettingsProvider.UpdateAsync(_settings);
-    }
-
-    private IReadOnlyList<UserAdministrationItem> _users =
-        [];
-
-    private bool _loadingUsers;
-    private string? _updatingUserId;
-
-    private async Task LoadUsersAsync()
-    {
         try
         {
-            _loadingUsers = true;
-            _users =
-                await UserAdministrationService
-                    .GetUsersAsync();
-        }
-        finally
-        {
-            _loadingUsers = false;
-        }
-    }
-
-    private async Task SetAdminAsync(
-        UserAdministrationItem user,
-        bool isAdmin)
-    {
-        try
-        {
-            _updatingUserId = user.Id;
-
-            var result =
-                await UserAdministrationService.SetAdminAsync(
-                    user.Id,
-                    isAdmin);
-
-            if (result.Succeeded)
-            {
-                Snackbar.Add(
-                    (isAdmin
-                        ? $"{user.DisplayName} is now an administrator. "
-                        : $"{user.DisplayName} is no longer an administrator. ")
-                    + "The change takes effect after the user's next sign-in.",
-                    Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add(
-                    string.Join(
-                        " ",
-                        result.Errors.Select(error => error.Description)),
-                    Severity.Error);
-            }
-
-            await LoadUsersAsync();
+            _saving = true;
+            await SettingsProvider.UpdateAsync(_settings);
+            Snackbar.Add("Preferences saved.", Severity.Success);
         }
         catch (Exception exception)
         {
-            Logger.LogError(
-                exception,
-                "Unable to update administrator access for {UserId}.",
-                user.Id);
-
-            Snackbar.Add(
-                "Unable to update administrator access.",
-                Severity.Error);
+            Logger.LogError(exception, "Unable to save local settings.");
+            Snackbar.Add("Unable to save preferences.", Severity.Error);
         }
         finally
         {
-            _updatingUserId = null;
+            _saving = false;
         }
     }
+
 }

@@ -1,115 +1,71 @@
 @page "/"
 
-<RasStudioPageTitle Title="Dashboard"/>
+<AppPageTitle Title="Home"/>
 
-<MudContainer MaxWidth="MaxWidth.False"
-              Style="max-width: 2240px;"
-              Class="py-8">
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="Home"
+              Subtitle="Administration and monitoring of your 1C:Enterprise environments"
+              Icon="@Icons.Material.Filled.Home">
 
-    <MudStack Spacing="6">
+    <MudGrid Spacing="3">
+        @foreach (var metric in OverviewMetrics)
+        {
+            <MudItem xs="12" sm="6" lg="3">
+                <MudPaper Class="app-card" Style="height: 100%;" Elevation="1">
+                    <MudStack Spacing="3" Style="height: 100%;">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudAvatar Color="@metric.Color" Variant="Variant.Outlined" Size="Size.Medium">
+                                <MudIcon Icon="@metric.Icon"/>
+                            </MudAvatar>
 
-        <MudStack Spacing="1">
-            <MudText Typo="Typo.h3">
-                Dashboard
-            </MudText>
-
-            <MudText Typo="Typo.subtitle1"
-                     Color="Color.Secondary">
-                Overview of your 1C:Enterprise server infrastructure
-            </MudText>
-        </MudStack>
-
-        <MudDivider/>
-
-        <MudGrid Spacing="3">
-
-            @foreach (var metric in DashboardMetrics)
-            {
-                <MudItem xs="12" sm="6" lg="3">
-                    <MudPaper Class="pa-5"
-                              Style="height: 100%;"
-                              Elevation="1">
-
-                        <MudStack Spacing="3"
-                                  Style="height: 100%;">
-
-                            <MudStack Row
-                                      AlignItems="AlignItems.Center"
-                                      Spacing="2">
-
-                                <MudAvatar Color="@metric.Color"
-                                           Variant="Variant.Outlined"
-                                           Size="Size.Medium">
-
-                                    <MudIcon Icon="@metric.Icon"/>
-
-                                </MudAvatar>
-
-                                <MudText Typo="Typo.subtitle1">
-                                    @metric.Title
-                                </MudText>
-
-                            </MudStack>
-
-                            <MudText Typo="Typo.h3">
-                                @metric.Value
-                            </MudText>
-
-                            <MudText Typo="Typo.body2"
-                                     Color="Color.Secondary">
-                                @metric.Description
-                            </MudText>
-
+                            <MudText Typo="Typo.subtitle1">@metric.Title</MudText>
                         </MudStack>
 
-                    </MudPaper>
-                </MudItem>
-            }
+                        <a class="metric-value-link"
+                           href="@metric.ValueHref"
+                           aria-label="@metric.ValueAriaLabel">
+                            <MudText Typo="Typo.h3">@metric.Value</MudText>
+                        </a>
 
-        </MudGrid>
-
-    </MudStack>
-
-</MudContainer>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @metric.Description
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</AppPageShell>
 
 @code {
 
-    private static readonly IReadOnlyList<DashboardMetric> DashboardMetrics =
+    private static readonly IReadOnlyList<OverviewMetric> OverviewMetrics =
     [
         new(
-            "RasGate Instances",
+            "RasGates",
             "0",
-            "Connected administration gateways",
-            "material-symbols-outlined/settings_ethernet",
-            Color.Primary),
-
+            "Gateways available through RasHub",
+            Icons.Material.Filled.SettingsEthernet,
+            Color.Primary,
+            "/ras-gates",
+            "View RasGates"),
         new(
             "Clusters",
             "0",
             "Discovered 1C:Enterprise clusters",
-            "material-symbols-outlined/storage",
-            Color.Primary),
-
-        new(
-            "Infobases",
-            "0",
-            "Discovered information bases",
-            "material-symbols-outlined/database",
-            Color.Primary),
-
-        new(
-            "Sync Issues",
-            "0",
-            "Synchronization errors requiring attention",
-            "material-symbols-outlined/sync_problem",
-            Color.Primary)
+            Icons.Material.Filled.Storage,
+            Color.Primary,
+            "/clusters",
+            "View clusters")
     ];
 
-    private sealed record DashboardMetric(
+    private sealed record OverviewMetric(
         string Title,
         string Value,
         string Description,
         string Icon,
-        Color Color);
+        Color Color,
+        string ValueHref,
+        string ValueAriaLabel);
 
 }

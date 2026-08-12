@@ -8,55 +8,21 @@
 
 <MudLayout>
     <MudAppBar Elevation="1">
-
-        <div class="brand">
-
-            <MudIcon Icon="material-symbols-outlined/polymer"
-                     Size="Size.Large"
-                     Color="Color.Primary"/>
-
-            <div>
-
-                <MudStack Row="true"
-                          Spacing="1"
-                          AlignItems="AlignItems.Center">
-
-                    <MudText Typo="Typo.h6">
-                        RasStudio
-                    </MudText>
-
-                    <MudText Typo="Typo.overline"
-                             Color="Color.Primary">
-
-                        Server Admin
-
-                    </MudText>
-
-                </MudStack>
-
-            </div>
-
-        </div>
-
+        <AppBrand/>
     </MudAppBar>
 
-    <MudDrawer id="nav-drawer"
-               Variant="DrawerVariant.Mini"
-               Breakpoint="Breakpoint.None"
-               ClipMode="DrawerClipMode.Always"
-               Elevation="2">
-
+    <MudDrawer id="nav-drawer" Variant="DrawerVariant.Mini" Breakpoint="Breakpoint.None"
+               ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu/>
-
     </MudDrawer>
 
-    <MudMainContent Class="pt-16 pa-4">
+    <MudMainContent Class="pt-16">
         @Body
     </MudMainContent>
 </MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
+    RasStudio Mono encountered an unexpected error.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <span class="dismiss" aria-label="Dismiss">×</span>
 </div>
