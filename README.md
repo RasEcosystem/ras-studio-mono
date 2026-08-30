@@ -10,11 +10,9 @@
 RasStudio Mono is an experimental cross-platform desktop application for
 managing 1C:Enterprise RAS infrastructure.
 
-> **Note:** RasStudio Mono is an independent, experimental, alternative take on
-> the RasStudio client, not the project's primary implementation. It comes with
-> no guarantees of stability, feature completeness, or compatibility between
-> releases. Its architecture, behavior, and local data formats may change
-> without notice.
+> **Note:** RasStudio Mono is experimental and comes with no guarantees of
+> stability, feature completeness, or compatibility between releases. Its
+> architecture, behavior, and local data formats may change without notice.
 
 ![RasStudio Mono Home page running in an Electron desktop window](docs/img/ras-studio.png)
 
@@ -106,12 +104,12 @@ window closes.
 
 ## Related projects
 
-- [RasStudio](https://github.com/RasEcosystem/ras-studio) — primary RAS
-  infrastructure management client
-- [RasHub](https://github.com/RasEcosystem/ras-hub-public) — centralized API
-  and infrastructure management service
+RasStudio Mono is part of the [Ras Ecosystem](https://github.com/RasEcosystem):
+
+- [RasHub](https://github.com/RasEcosystem/ras-hub) — the central management
+  service that connects RasStudio Mono to RasGate and provides a unified API;
 - [RasGate](https://github.com/RasEcosystem/ras-gate) — HTTP gateway for the
-  Remote Administration Client
+  Remote Administration Client.
 
 ## License
 

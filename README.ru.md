@@ -10,9 +10,8 @@
 RasStudio Mono — экспериментальное кроссплатформенное desktop-приложение для
 управления инфраструктурой RAS платформы «1С:Предприятие».
 
-> **Примечание:** RasStudio Mono — независимое экспериментальное и
-> альтернативное видение клиента RasStudio, а не основная реализация проекта.
-> Проект предоставляется без гарантий стабильности, полноты возможностей или
+> **Примечание:** RasStudio Mono находится на экспериментальной стадии и
+> предоставляется без гарантий стабильности, полноты возможностей или
 > совместимости между выпусками. Архитектура, поведение и форматы локальных
 > данных могут меняться без предварительного уведомления.
 
@@ -105,12 +104,13 @@ make test
 
 ## Связанные проекты
 
-- [RasStudio](https://github.com/RasEcosystem/ras-studio) — основной проект
-  клиента управления инфраструктурой RAS
-- [RasHub](https://github.com/RasEcosystem/ras-hub-public) — централизованный API
-  и сервис управления инфраструктурой
+RasStudio Mono входит в [Ras Ecosystem](https://github.com/RasEcosystem):
+
+- [RasHub](https://github.com/RasEcosystem/ras-hub) — центральный сервис
+  управления, который связывает RasStudio Mono с RasGate и предоставляет единый
+  API;
 - [RasGate](https://github.com/RasEcosystem/ras-gate) — HTTP-шлюз для Remote
-  Administration Client
+  Administration Client.
 
 ## Лицензия
 
