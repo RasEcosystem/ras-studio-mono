@@ -9,7 +9,7 @@ WEB_PROJECT := src/RasStudio.Web/RasStudio.Web.csproj
 .DEFAULT_GOAL := help
 
 .PHONY: help all submodules submodules-update restore build debug build-release run \
-	package release package-linux package-windows dotnet-tests visual desktop-smoke \
+	package release package-linux package-windows format format-check dotnet-tests visual desktop-smoke \
 	mcp-smoke test clean
 
 help:
@@ -24,6 +24,8 @@ help:
 		'  make package           Build a package for the current Windows/Linux host' \
 		'  make package-linux     Build the Linux x64 AppImage (run on Linux)' \
 		'  make package-windows   Build Windows x64 installer and portable app (run on Windows)' \
+		'  make format            Format the solution' \
+		'  make format-check      Verify formatting exactly as CI should' \
 		'  make dotnet-tests      Run unit and integration test projects' \
 		'  make visual            Capture Home page screenshots for every theme' \
 		'  make desktop-smoke     Verify Electron/Kestrel startup and shutdown lifecycle' \
@@ -71,6 +73,12 @@ package-windows:
 	$(DOTNET) restore "$(WEB_PROJECT)" --runtime win-x64
 	$(DOTNET) publish "$(WEB_PROJECT)" --no-restore -p:PublishProfile=win-x64
 
+format: restore
+	$(DOTNET) format "$(SOLUTION)" --no-restore
+
+format-check: restore
+	$(DOTNET) format "$(SOLUTION)" --no-restore --verify-no-changes
+
 dotnet-tests: restore
 	$(DOTNET) test "$(SOLUTION)" --configuration "$(CONFIGURATION)" --no-restore -m:1
 
@@ -83,7 +91,7 @@ desktop-smoke:
 mcp-smoke:
 	tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh
 
-test: build-release dotnet-tests visual desktop-smoke mcp-smoke
+test: build-release format-check dotnet-tests visual desktop-smoke mcp-smoke
 
 clean:
 	$(DOTNET) clean "$(SOLUTION)"

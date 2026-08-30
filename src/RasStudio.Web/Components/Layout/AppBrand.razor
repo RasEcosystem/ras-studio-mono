@@ -6,19 +6,24 @@
             <a href="/" class="app-brand-home-link">@Title</a>
         </span>
 
-        @if (!string.IsNullOrWhiteSpace(Badge))
+        @if (RasStudioVersion.PrereleaseLabel is not null)
         {
             <span class="app-brand-badge">
-                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                    @Badge
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="Color.Warning"
+                         Variant="Variant.Outlined">
+                    @RasStudioVersion.PrereleaseLabel
                 </MudChip>
             </span>
         }
 
+        <span class="app-brand-version">
+            @RasStudioVersion.Display
+        </span>
     </span>
 </div>
 
 @code {
     [Parameter] public string Title { get; set; } = "RasStudio Mono";
-    [Parameter] public string? Badge { get; set; } = "ALPHA";
 }

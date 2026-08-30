@@ -1,15 +1,664 @@
 @page "/ras-gates"
+@implements IDisposable
+@inject IRasGateService RasGateService
+@inject IRasHubConnectionSettings ConnectionSettings
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<RasGates> Logger
 
 <AppPageTitle Title="RasGates"/>
 
 <AppPageShell Width="AppPageWidth.Wide"
               Title="RasGates"
-              Subtitle="View gateway connections and their current status in RasHub"
+              Subtitle="Manage gateway connections and inspect their status through RasHub"
               Icon="@Icons.Material.Filled.SettingsEthernet">
+    <HeaderActions>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.Add"
+                   Disabled="@(!_connection.IsConfigured || _busyGateId is not null)"
+                   OnClick="AddAsync">
+            Add RasGate
+        </MudButton>
+    </HeaderActions>
+    <ChildContent>
+        @if (!_connection.IsConfigured)
+        {
+            <MudPaper Class="app-card" Elevation="1">
+                <AppEmptyState Title="Connect to RasHub"
+                               Description="Configure a RasHub URL and user API key before managing gateways."
+                               Icon="@Icons.Material.Outlined.Hub">
+                    <Actions>
+                        <MudButton Href="/settings"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Settings">
+                            Open settings
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudPaper Class="app-card" Elevation="1">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="8">
+                            <MudTextField T="string"
+                                          @bind-Value="_searchText"
+                                          Label="Search RasGates"
+                                          Placeholder="Name or URL"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@Icons.Material.Outlined.Search"
+                                          OnAdornmentClick="ApplySearchAsync"
+                                          MaxLength="200"
+                                          Disabled="@(_loading || _busyGateId is not null)"
+                                          Immediate/>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudStack Row
+                                      Wrap="Wrap.Wrap"
+                                      Justify="Justify.FlexEnd"
+                                      Spacing="1">
+                                <MudButton Variant="Variant.Outlined"
+                                           StartIcon="@Icons.Material.Outlined.Search"
+                                           Disabled="@(_loading || _busyGateId is not null)"
+                                           OnClick="ApplySearchAsync">
+                                    Search
+                                </MudButton>
+                                @if (!string.IsNullOrEmpty(_appliedSearch))
+                                {
+                                    <MudButton Variant="Variant.Text"
+                                               StartIcon="@Icons.Material.Outlined.FilterAltOff"
+                                               Disabled="@(_loading || _busyGateId is not null)"
+                                               OnClick="ClearSearchAsync">
+                                        Clear
+                                    </MudButton>
+                                }
+                                <MudTooltip Text="Reload gateways and persisted status">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                                                   Color="Color.Primary"
+                                                   Disabled="@(_loading || _busyGateId is not null)"
+                                                   OnClick="LoadPageAsync"
+                                                   aria-label="Reload RasGates"/>
+                                </MudTooltip>
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
 
-    <MudPaper Class="app-card" Elevation="1">
-        <AppEmptyState Title="No RasGates available"
-                       Description="RasGates from the connected RasHub environment will appear here."
-                       Icon="@Icons.Material.Filled.SettingsEthernet"/>
-    </MudPaper>
+                @if (_loadError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudStack Row
+                                  AlignItems="AlignItems.Center"
+                                  Justify="Justify.SpaceBetween"
+                                  Spacing="2">
+                            <MudText Typo="Typo.body2">@_loadError</MudText>
+                            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="LoadPageAsync">
+                                Retry
+                            </MudButton>
+                        </MudStack>
+                    </MudAlert>
+                }
+
+                <MudPaper Class="app-card ras-gates-card" Elevation="1">
+                    @if (_loading)
+                    {
+                        <MudProgressLinear Indeterminate Color="Color.Primary" Class="mb-2"/>
+                    }
+
+                    <MudTable T="RasGate"
+                              Items="@_page.Items"
+                              Hover
+                              Elevation="0"
+                              Breakpoint="Breakpoint.Md"
+                              RowsPerPage="@int.MaxValue"
+                              Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Status</MudTh>
+                            <MudTh>RasGate</MudTh>
+                            <MudTh>Endpoint</MudTh>
+                            <MudTh>Remote instance</MudTh>
+                            <MudTh>Changed</MudTh>
+                            <MudTh Class="text-right">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Status">
+                                <MudTooltip Text="@StatusTooltip(context)">
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Variant="Variant.Outlined"
+                                             Icon="@StatusIcon(context)"
+                                             Color="@StatusColor(context)">
+                                        @StatusLabel(context)
+                                    </MudChip>
+                                </MudTooltip>
+                            </MudTd>
+                            <MudTd DataLabel="RasGate">
+                                <MudText Typo="Typo.body2">@context.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @context.Id.ToString("D")
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Endpoint">
+                                <MudText Typo="Typo.body2">@FormatEndpoint(context)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Remote instance">
+                                @if (GetStatus(context.Id) is { } status)
+                                {
+                                    <MudText Typo="Typo.body2">@(status.InstanceName ?? "—")</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Gate @(status.RasGateVersion ?? "—") · RAC @(status.RacVersion ?? "—")
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Observed @FormatTime(status.RasGateObservedAt)
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Changed">
+                                <MudText Typo="Typo.body2">@FormatTime(context.UpdatedAt)</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Created @FormatTime(context.CreatedAt)
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Actions" Class="text-right">
+                                @if (_busyGateId == context.Id)
+                                {
+                                    <MudProgressCircular Indeterminate Size="Size.Small" Color="Color.Primary"/>
+                                }
+                                else
+                                {
+                                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                             Size="Size.Small"
+                                             Dense
+                                             AnchorOrigin="Origin.BottomRight"
+                                             TransformOrigin="Origin.TopRight"
+                                             Disabled="@(_busyGateId is not null)"
+                                             AriaLabel="@($"Actions for {context.Name}")">
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Refresh"
+                                                     Disabled="@(!context.IsActive)"
+                                                     OnClick="@(() => RefreshStatusAsync(context))">
+                                            Refresh live status
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit"
+                                                     OnClick="@(() => EditAsync(context))">
+                                            Edit connection
+                                        </MudMenuItem>
+                                        <MudDivider/>
+                                        <MudMenuItem Icon="@(context.IsActive
+                                                               ? Icons.Material.Outlined.PauseCircle
+                                                               : Icons.Material.Outlined.PlayCircle)"
+                                                     IconColor="@(context.IsActive ? Color.Warning : Color.Success)"
+                                                     OnClick="@(() => SetActiveAsync(context, !context.IsActive))">
+                                            @(context.IsActive ? "Deactivate" : "Activate")
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.DeleteOutline"
+                                                     IconColor="Color.Error"
+                                                     OnClick="@(() => DeleteAsync(context))">
+                                            Delete
+                                        </MudMenuItem>
+                                    </MudMenu>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <AppEmptyState Title="No RasGates found"
+                                           Description="Add a gateway connection or change the current search."
+                                           Icon="@Icons.Material.Filled.SettingsEthernet">
+                                <Actions>
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Outlined.Add"
+                                               OnClick="AddAsync">
+                                        Add RasGate
+                                    </MudButton>
+                                </Actions>
+                            </AppEmptyState>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    <MudDivider Class="my-3"/>
+
+                    <MudStack Row
+                              Wrap="Wrap.Wrap"
+                              AlignItems="AlignItems.Center"
+                              Justify="Justify.SpaceBetween"
+                              Spacing="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @_page.TotalCount.ToString("N0") gateway registration(s)
+                        </MudText>
+
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSelect T="int"
+                                       Label="Per page"
+                                       Value="@_pageSize"
+                                       ValueChanged="PageSizeChangedAsync"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Disabled="@(_loading || _busyGateId is not null)">
+                                <MudSelectItem Value="10">10</MudSelectItem>
+                                <MudSelectItem Value="25">25</MudSelectItem>
+                                <MudSelectItem Value="50">50</MudSelectItem>
+                                <MudSelectItem Value="100">100</MudSelectItem>
+                            </MudSelect>
+
+                            @if (_page.TotalPages > 1)
+                            {
+                                <MudPagination Count="@_page.TotalPages"
+                                               Selected="@_pageNumber"
+                                               SelectedChanged="PageChangedAsync"
+                                               ShowFirstButton
+                                               ShowLastButton
+                                               Disabled="@(_loading || _busyGateId is not null)"/>
+                            }
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        }
+    </ChildContent>
 </AppPageShell>
+
+@code {
+
+    private static readonly DialogOptions EditorDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = true,
+        BackdropClick = false
+    };
+
+    private static readonly IReadOnlyCollection<RasGateSearchField> SearchFields =
+    [
+        RasGateSearchField.Name,
+        RasGateSearchField.Url
+    ];
+
+    private readonly CancellationTokenSource _disposeToken = new();
+    private readonly Dictionary<Guid, RasGateStatus> _statuses = [];
+    private readonly Dictionary<Guid, string> _statusErrors = [];
+    private RasHubConnectionState _connection = new(string.Empty, false);
+    private RasGatePage _page = new([], 0, 1, 10, 0);
+    private Guid? _busyGateId;
+    private string? _loadError;
+    private string? _searchText;
+    private string? _appliedSearch;
+    private int _pageNumber = 1;
+    private int _pageSize = 10;
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connection = ConnectionSettings.Current;
+        if (_connection.IsConfigured)
+            await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        if (_loading)
+            return;
+
+        _connection = ConnectionSettings.Current;
+        if (!_connection.IsConfigured)
+            return;
+
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            var page = await RasGateService.GetPageAsync(
+                _pageNumber,
+                _pageSize,
+                _appliedSearch,
+                SearchFields,
+                _disposeToken.Token);
+
+            if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+            {
+                _pageNumber = page.TotalPages;
+                page = await RasGateService.GetPageAsync(
+                    _pageNumber,
+                    _pageSize,
+                    _appliedSearch,
+                    SearchFields,
+                    _disposeToken.Token);
+            }
+
+            _page = page;
+            await LoadShadowStatusesAsync(page.Items);
+            Logger.LogDebug(
+                "Loaded RasGate page {Page} with {ItemCount} items of {TotalCount}",
+                page.Page,
+                page.Items.Count,
+                page.TotalCount);
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load RasGates from RasHub");
+            _loadError = GetErrorMessage(exception, "Unable to load RasGates from RasHub.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadShadowStatusesAsync(IReadOnlyList<RasGate> gates)
+    {
+        _statuses.Clear();
+        _statusErrors.Clear();
+
+        using var requestThrottle = new SemaphoreSlim(4);
+        var results = await Task.WhenAll(gates.Where(gate => gate.IsActive).Select(async gate =>
+        {
+            await requestThrottle.WaitAsync(_disposeToken.Token);
+            try
+            {
+                var status = await RasGateService.GetShadowStatusAsync(
+                    gate.Id,
+                    _disposeToken.Token);
+                return new StatusLoadResult(gate.Id, status, null);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return new StatusLoadResult(
+                    gate.Id,
+                    null,
+                    GetErrorMessage(exception, "Persisted status is unavailable."));
+            }
+            finally
+            {
+                requestThrottle.Release();
+            }
+        }));
+
+        foreach (var result in results)
+        {
+            if (result.Status is not null)
+                _statuses[result.GateId] = result.Status;
+            if (result.Error is not null)
+                _statusErrors[result.GateId] = result.Error;
+        }
+    }
+
+    private async Task ApplySearchAsync()
+    {
+        _appliedSearch = string.IsNullOrWhiteSpace(_searchText)
+            ? null
+            : _searchText.Trim();
+        _pageNumber = 1;
+        await LoadPageAsync();
+    }
+
+    private async Task ClearSearchAsync()
+    {
+        _searchText = null;
+        _appliedSearch = null;
+        _pageNumber = 1;
+        await LoadPageAsync();
+    }
+
+    private async Task PageChangedAsync(int page)
+    {
+        _pageNumber = page;
+        await LoadPageAsync();
+    }
+
+    private async Task PageSizeChangedAsync(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadPageAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        var values = await ShowEditorAsync(null);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            "Register",
+            null,
+            cancellationToken => RasGateService.CreateAsync(
+                new CreateRasGate(
+                    values.Name,
+                    values.Url,
+                    values.Port,
+                    values.ApiKey!,
+                    values.IsActive),
+                cancellationToken),
+            "RasGate was added.",
+            "Unable to add the RasGate.",
+            true);
+    }
+
+    private async Task EditAsync(RasGate gate)
+    {
+        var values = await ShowEditorAsync(gate);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            "Update",
+            gate.Id,
+            cancellationToken => RasGateService.UpdateAsync(
+                gate.Id,
+                new UpdateRasGate(
+                    values.Name,
+                    values.Url,
+                    values.Port,
+                    values.IsActive,
+                    values.ApiKey),
+                cancellationToken),
+            $"{gate.Name} was updated.",
+            "Unable to update the RasGate.");
+    }
+
+    private Task SetActiveAsync(RasGate gate, bool isActive)
+    {
+        return ExecuteAsync(
+            isActive ? "Activate" : "Deactivate",
+            gate.Id,
+            cancellationToken => RasGateService.UpdateAsync(
+                gate.Id,
+                new UpdateRasGate(
+                    gate.Name,
+                    gate.Url,
+                    gate.Port,
+                    isActive),
+                cancellationToken),
+            isActive ? $"{gate.Name} was activated." : $"{gate.Name} was deactivated.",
+            "Unable to change RasGate activity.");
+    }
+
+    private async Task RefreshStatusAsync(RasGate gate)
+    {
+        await ExecuteAsync(
+            "RefreshLiveStatus",
+            gate.Id,
+            cancellationToken => RasGateService.RefreshStatusAsync(gate.Id, cancellationToken),
+            $"Live status for {gate.Name} was refreshed.",
+            "Unable to refresh live RasGate status.");
+    }
+
+    private async Task DeleteAsync(RasGate gate)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete RasGate?",
+            $"Delete {gate.Name}? RasHub will soft-delete the registration and its shadow resources.",
+            "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        await ExecuteAsync(
+            "Delete",
+            gate.Id,
+            cancellationToken => RasGateService.DeleteAsync(gate.Id, cancellationToken),
+            $"{gate.Name} was deleted.",
+            "Unable to delete the RasGate.");
+    }
+
+    private async Task<RasGateEditorValues?> ShowEditorAsync(RasGate? gate)
+    {
+        var parameters = new DialogParameters<RasGateEditorDialog>();
+        if (gate is not null)
+            parameters.Add(dialog => dialog.Gate, gate);
+
+        var dialog = await DialogService.ShowAsync<RasGateEditorDialog>(
+            gate is null ? "Add RasGate" : $"Edit {gate.Name}",
+            parameters,
+            EditorDialogOptions);
+        var result = await dialog.Result;
+
+        return result is { Canceled: false, Data: RasGateEditorValues values }
+            ? values
+            : null;
+    }
+
+    private async Task ExecuteAsync<T>(
+        string operationName,
+        Guid? gateId,
+        Func<CancellationToken, Task<T>> operation,
+        string successMessage,
+        string fallbackError,
+        bool resetToFirstPage = false)
+    {
+        if (_busyGateId is not null)
+            return;
+
+        try
+        {
+            _busyGateId = gateId ?? Guid.Empty;
+            await operation(_disposeToken.Token);
+            Logger.LogInformation(
+                "RasGate operation {Operation} succeeded for {RasGateId}",
+                operationName,
+                gateId);
+            Snackbar.Add(successMessage, Severity.Success);
+
+            if (resetToFirstPage)
+                _pageNumber = 1;
+
+            await LoadPageAsync();
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "RasGate operation {Operation} failed for {RasGateId}",
+                operationName,
+                gateId);
+            Snackbar.Add(GetErrorMessage(exception, fallbackError), Severity.Error);
+        }
+        finally
+        {
+            _busyGateId = null;
+        }
+    }
+
+    private RasGateStatus? GetStatus(Guid gateId)
+    {
+        return _statuses.GetValueOrDefault(gateId);
+    }
+
+    private string StatusLabel(RasGate gate)
+    {
+        if (!gate.IsActive)
+            return "Inactive";
+
+        return GetStatus(gate.Id)?.State.ToString() ?? "Unknown";
+    }
+
+    private Color StatusColor(RasGate gate)
+    {
+        if (!gate.IsActive)
+            return Color.Default;
+
+        return GetStatus(gate.Id)?.State switch
+        {
+            RasGateHealth.Offline => Color.Error,
+            RasGateHealth.Degraded => Color.Warning,
+            RasGateHealth.Ready => Color.Success,
+            _ => Color.Default
+        };
+    }
+
+    private string StatusIcon(RasGate gate)
+    {
+        if (!gate.IsActive)
+            return Icons.Material.Outlined.PauseCircle;
+
+        return GetStatus(gate.Id)?.State switch
+        {
+            RasGateHealth.Offline => Icons.Material.Outlined.ErrorOutline,
+            RasGateHealth.Degraded => Icons.Material.Outlined.WarningAmber,
+            RasGateHealth.Ready => Icons.Material.Outlined.CheckCircle,
+            _ => Icons.Material.Outlined.HelpOutline
+        };
+    }
+
+    private string StatusTooltip(RasGate gate)
+    {
+        if (!gate.IsActive)
+            return "This registration is inactive.";
+        if (_statusErrors.TryGetValue(gate.Id, out var error))
+            return error;
+        if (GetStatus(gate.Id) is { } status)
+            return $"Gate observed {FormatTime(status.RasGateObservedAt)}; RAC observed {FormatTime(status.RacObservedAt)}.";
+
+        return "No persisted status observation is available.";
+    }
+
+    private static string FormatEndpoint(RasGate gate)
+    {
+        return $"{gate.Url.TrimEnd('/')}:{gate.Port}";
+    }
+
+    private static string FormatTime(DateTime? value)
+    {
+        return value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—";
+    }
+
+    private static string GetErrorMessage(Exception exception, string fallback)
+    {
+        return exception switch
+        {
+            RasHubApiException apiException when apiException.TraceId is not null =>
+                $"{apiException.Message} Trace: {apiException.TraceId}",
+            RasHubApiException apiException => apiException.Message,
+            RasHubConnectionNotConfiguredException notConfigured => notConfigured.Message,
+            _ => fallback
+        };
+    }
+
+    public void Dispose()
+    {
+        _disposeToken.Cancel();
+        _disposeToken.Dispose();
+    }
+
+    private sealed record StatusLoadResult(
+        Guid GateId,
+        RasGateStatus? Status,
+        string? Error);
+
+}

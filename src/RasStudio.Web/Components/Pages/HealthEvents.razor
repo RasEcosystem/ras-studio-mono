@@ -1,0 +1,260 @@
+@page "/health-events"
+@implements IAsyncDisposable
+@inject ApplicationDiagnostics Diagnostics
+@inject TimeProvider TimeProvider
+@inject ILogger<HealthEvents> Logger
+
+<AppPageTitle Title="Application events"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="Application events"
+              Subtitle="Warnings and errors retained for the current Studio process"
+              Icon="@Icons.Material.Filled.ManageSearch">
+    <HeaderActions>
+        <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
+            Warnings @WarningCount.ToString("N0")
+        </MudChip>
+        <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">
+            Errors @ErrorCount.ToString("N0")
+        </MudChip>
+    </HeaderActions>
+    <ChildContent>
+        <MudStack Spacing="3">
+            <MudPaper Class="app-card" Elevation="1">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="8">
+                        <MudTextField T="string"
+                                      @bind-Value="_searchText"
+                                      Label="Search events"
+                                      Placeholder="Message, source, trace, or exception"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@Icons.Material.Outlined.Search"
+                                      Immediate/>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="DiagnosticEventLevelFilter"
+                                   @bind-Value="_levelFilter"
+                                   Label="Level"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense">
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.All">All actionable</MudSelectItem>
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.Warnings">Warnings</MudSelectItem>
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.Errors">Errors</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudPaper Class="app-card events-card" Elevation="1">
+                <MudTable T="ApplicationDiagnosticEvent"
+                          Items="@FilteredEvents"
+                          Dense
+                          Hover
+                          Breakpoint="Breakpoint.Md"
+                          RowsPerPage="25">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Level</MudTh>
+                        <MudTh>Source</MudTh>
+                        <MudTh>Message</MudTh>
+                        <MudTh>Trace</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Time" Class="event-time">
+                            <MudText Typo="Typo.body2">
+                                @context.Timestamp.ToLocalTime().ToString("dd MMM HH:mm:ss")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @($"#{context.Id}")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Level">
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Variant="Variant.Outlined"
+                                     Color="@GetLevelColor(context.Level)">
+                                @GetLevelLabel(context.Level)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Source">
+                            <span class="event-source" title="@context.SourceContext">
+                                @foreach (var sourcePart in GetSourceParts(context.SourceContext))
+                                {
+                                    <span class="event-source-line">@sourcePart</span>
+                                }
+                            </span>
+                        </MudTd>
+                        <MudTd DataLabel="Message" Class="event-message">
+                            <MudText Typo="Typo.body2">@context.Message</MudText>
+                            @if (context.ExceptionDetails is not null)
+                            {
+                                <details class="event-details">
+                                    <summary>Technical details</summary>
+                                    @if (context.ExceptionType is not null)
+                                    {
+                                        <div class="event-exception-type">@context.ExceptionType</div>
+                                    }
+                                    <pre>@context.ExceptionDetails</pre>
+                                </details>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Trace">
+                            <span class="event-trace">@(context.TraceId ?? "—")</span>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <AppEmptyState Title="No matching warnings or errors"
+                                       Description="Healthy informational events remain in the rolling log files."
+                                       Icon="@Icons.Material.Outlined.CheckCircleOutline"/>
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="@(new[] { 10, 25, 50, 100 })"/>
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+        </MudStack>
+    </ChildContent>
+</AppPageShell>
+
+@code {
+    private readonly CancellationTokenSource _disposeToken = new();
+    private Task _pollTask = Task.CompletedTask;
+    private IReadOnlyList<ApplicationDiagnosticEvent> _events = [];
+    private DiagnosticEventLevelFilter _levelFilter;
+    private string? _searchText;
+
+    [SupplyParameterFromQuery(Name = "level")]
+    public string? Level { get; set; }
+
+    private IReadOnlyList<ApplicationDiagnosticEvent> FilteredEvents => _events
+        .Where(MatchesLevel)
+        .Where(MatchesSearch)
+        .ToArray();
+
+    private int WarningCount => _events.Count(item => item.Level == LogEventLevel.Warning);
+
+    private int ErrorCount => _events.Count(item =>
+        item.Level is LogEventLevel.Error or LogEventLevel.Fatal);
+
+    protected override void OnParametersSet()
+    {
+        _levelFilter = ParseLevelFilter(Level);
+        RefreshEvents();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+            _pollTask = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), TimeProvider);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(() =>
+                {
+                    RefreshEvents();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Application event polling stopped unexpectedly");
+        }
+    }
+
+    private void RefreshEvents()
+    {
+        _events = Diagnostics.GetEvents();
+    }
+
+    private bool MatchesLevel(ApplicationDiagnosticEvent diagnosticEvent)
+    {
+        return _levelFilter switch
+        {
+            DiagnosticEventLevelFilter.Warnings =>
+                diagnosticEvent.Level == LogEventLevel.Warning,
+            DiagnosticEventLevelFilter.Errors =>
+                diagnosticEvent.Level is LogEventLevel.Error or LogEventLevel.Fatal,
+            _ => true
+        };
+    }
+
+    private bool MatchesSearch(ApplicationDiagnosticEvent diagnosticEvent)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+            return true;
+
+        var searchText = _searchText.Trim();
+        return Contains(diagnosticEvent.Message, searchText) ||
+               Contains(diagnosticEvent.SourceContext, searchText) ||
+               Contains(diagnosticEvent.TraceId, searchText) ||
+               Contains(diagnosticEvent.ExceptionMessage, searchText) ||
+               Contains(diagnosticEvent.ExceptionType, searchText);
+    }
+
+    private static bool Contains(string? value, string searchText)
+    {
+        return value?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static Color GetLevelColor(LogEventLevel level)
+    {
+        return level == LogEventLevel.Warning ? Color.Warning : Color.Error;
+    }
+
+    private static string GetLevelLabel(LogEventLevel level)
+    {
+        return level == LogEventLevel.Fatal ? "Fatal" : level.ToString();
+    }
+
+    private static DiagnosticEventLevelFilter ParseLevelFilter(string? level)
+    {
+        return level?.ToLowerInvariant() switch
+        {
+            "warnings" => DiagnosticEventLevelFilter.Warnings,
+            "errors" => DiagnosticEventLevelFilter.Errors,
+            _ => DiagnosticEventLevelFilter.All
+        };
+    }
+
+    private static IReadOnlyList<string> GetSourceParts(string? sourceContext)
+    {
+        if (string.IsNullOrWhiteSpace(sourceContext))
+            return ["Application"];
+
+        var parts = sourceContext.Split('.');
+        return parts.Length <= 2 ? parts : parts[^2..];
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeToken.Cancel();
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
+    }
+
+    private enum DiagnosticEventLevelFilter
+    {
+        All,
+        Warnings,
+        Errors
+    }
+
+}

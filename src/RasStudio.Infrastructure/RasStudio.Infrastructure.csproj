@@ -7,11 +7,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.9.0"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0"/>
+        <PackageReference Include="Nava.Settings" Version="0.2.0"/>
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\RasHub.Contracts\src\RasHub.Contracts\RasHub.Contracts.csproj"/>
         <ProjectReference Include="..\RasStudio.Application\RasStudio.Application.csproj"/>
     </ItemGroup>
 

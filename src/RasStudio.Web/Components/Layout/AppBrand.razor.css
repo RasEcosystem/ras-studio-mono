@@ -35,8 +35,13 @@
     display: inline-flex;
 }
 
+.app-brand-version {
+    flex: 0 0 auto;
+    color: var(--mud-palette-text-secondary);
+}
+
 @media (max-width: 420px) {
-    .app-brand-badge {
+    .app-brand-version {
         display: none;
     }
 }
