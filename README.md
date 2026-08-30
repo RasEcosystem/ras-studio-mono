@@ -16,6 +16,15 @@ managing 1C:Enterprise RAS infrastructure.
 
 ![RasStudio Mono Home page running in an Electron desktop window](docs/img/ras-studio.png)
 
+## AI assistant
+
+The built-in assistant provides streaming responses through an Ollama- or
+OpenAI-compatible endpoint. It can use the protected embedded MCP server to
+inspect RasStudio and RAS infrastructure through explicitly allowed read-only
+tools; provider and model settings are stored locally.
+
+![RasStudio Mono Assistant page](docs/img/ras-studio-assistant.png)
+
 ## Technology stack
 
 - .NET 10 and ASP.NET Core/Kestrel — local application backend

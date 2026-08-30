@@ -17,6 +17,15 @@ RasStudio Mono — экспериментальное кроссплатформ
 
 ![Страница Home приложения RasStudio Mono в desktop-окне Electron](docs/img/ras-studio.png)
 
+## AI-ассистент
+
+Встроенный ассистент получает потоковые ответы через Ollama- или
+OpenAI-совместимый endpoint. Он может обращаться к защищённому встроенному
+MCP-серверу и получать данные RasStudio и RAS только через явно разрешённые
+read-only tools; настройки провайдера и модели хранятся локально.
+
+![Страница Assistant приложения RasStudio Mono](docs/img/ras-studio-assistant.png)
+
 ## Технологический стек
 
 - .NET 10 и ASP.NET Core/Kestrel — локальный backend приложения
