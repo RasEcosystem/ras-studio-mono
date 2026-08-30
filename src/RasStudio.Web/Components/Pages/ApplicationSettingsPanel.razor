@@ -1,0 +1,102 @@
+@inject ISettingsProvider<ApplicationSettings> SettingsProvider
+@inject ISnackbar Snackbar
+@inject ILogger<ApplicationSettingsPanel> Logger
+
+<MudForm Model="_settings"
+         @ref="_form"
+         ValidationDelay="0">
+
+    <MudPaper Class="app-card" Elevation="1">
+        <MudStack Spacing="4">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Outlined.Palette"
+                         Size="Size.Small"
+                         Color="Color.Primary"/>
+
+                <MudText Typo="Typo.h5">Appearance</MudText>
+            </MudStack>
+
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Choose the visual theme used throughout the application.
+            </MudText>
+
+            <MudSelect T="AppTheme"
+                       Label="Theme"
+                       Variant="Variant.Outlined"
+                       FullWidth
+                       @bind-Value="_settings.Theme">
+                <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
+                <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
+                <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
+                <MudSelectItem Value="AppTheme.System">System default</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    <MudStack Row
+              Wrap="Wrap.Wrap"
+              Justify="Justify.FlexEnd"
+              Spacing="2"
+              Class="mt-3">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.Save"
+                   Disabled="_saving"
+                   OnClick="@SaveAsync">
+            @(_saving ? "Saving…" : "Save changes")
+        </MudButton>
+    </MudStack>
+</MudForm>
+
+@code {
+    private MudForm _form = null!;
+    private ApplicationSettings _settings = new();
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        _settings = new ApplicationSettings
+        {
+            Theme = SettingsProvider.Settings.Theme,
+            InferenceServerUrl = SettingsProvider.Settings.InferenceServerUrl,
+            InferenceModel = SettingsProvider.Settings.InferenceModel
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        await _form.ValidateAsync();
+
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            await SettingsProvider.UpdateAsync(new ApplicationSettings
+            {
+                Theme = _settings.Theme,
+                InferenceServerUrl = SettingsProvider.Settings.InferenceServerUrl,
+                InferenceModel = SettingsProvider.Settings.InferenceModel
+            });
+            Snackbar.Add("Preferences saved.", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to save local settings.");
+            Snackbar.Add("Unable to save preferences.", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+}

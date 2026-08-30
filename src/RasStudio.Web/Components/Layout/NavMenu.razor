@@ -28,6 +28,12 @@
     <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="nav-menu-bottom">
         <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
+        <MudTooltip Text="Assistant" Placement="Placement.Right" Arrow="true">
+            <MudIconButton Icon="@Icons.Material.Filled.Chat" Href="/assistant"
+                           Color="@GetRouteColor("assistant")" Size="Size.Medium"
+                           Variant="Variant.Text" aria-label="Assistant"/>
+        </MudTooltip>
+
         <MudTooltip Text="Settings" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.Settings" Href="/settings"
                            Color="@GetRouteColor("settings")" Size="Size.Medium"

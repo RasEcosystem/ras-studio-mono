@@ -1,10 +1,15 @@
 using ElectronNET;
 using ElectronNET.API;
 using ElectronNET.API.Entities;
+using Microsoft.Extensions.AI;
 using MudBlazor.Services;
 using Nava.Settings.DependencyInjection;
 using Nava.Settings.Extensions;
+using RasMcp.Extensions;
+using RasStudio.Application.Assistant;
 using RasStudio.Application.Settings;
+using RasStudio.Infrastructure.Assistant;
+using RasStudio.Web.Infrastructure.Assistant;
 using App = RasStudio.Web.Components.App;
 
 const string settingsFileName = "settings.db";
@@ -16,6 +21,18 @@ Directory.CreateDirectory(appDataPath);
 
 AddSettings(builder.Services, Path.Combine(appDataPath, settingsFileName));
 
+builder.Services.AddSingleton<AssistantConversationStore>();
+builder.Services.AddSingleton<AssistantMarkdownRenderer>();
+builder.Services.AddSingleton<RasMcpAccessToken>();
+builder.Services.AddSingleton<RasStudioMcpClient>();
+builder.Services.AddSingleton<AssistantAgent>();
+builder.Services.AddSingleton<IChatClient, ConfiguredChatClient>();
+builder.Services.AddRasMcp(options =>
+{
+    options.Name = "RasStudio Mono";
+    options.Version = GetApplicationVersion();
+    options.Description = "Desktop application for managing RAS infrastructure.";
+});
 builder.Services.AddMudServices();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -41,9 +58,18 @@ else
 var app = builder.Build();
 
 await app.Services.InitializeApplicationSettingsAsync();
+var mcpAccessToken = app.Services.GetRequiredService<RasMcpAccessToken>();
 
 app.Use(async (context, next) =>
 {
+    if (context.Request.Path.StartsWithSegments("/mcp") &&
+        !mcpAccessToken.IsAuthorized(context.Request.Headers.Authorization.ToString()))
+    {
+        context.Response.Headers.WWWAuthenticate = "Bearer";
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
     var headers = context.Response.Headers;
     headers["Content-Security-Policy"] =
         "default-src 'self'; " +
@@ -71,6 +97,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapRasMcp();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
@@ -91,12 +118,7 @@ static async Task CreateDesktopWindowAsync(IConfiguration configuration)
         Title = "RasStudio Mono",
         IsRunningBlazor = true,
         BackgroundColor = "#20252B",
-        WebPreferences = new WebPreferences
-        {
-            NodeIntegration = false,
-            ContextIsolation = true,
-            Sandbox = true
-        }
+        WebPreferences = new WebPreferences { NodeIntegration = false, ContextIsolation = true, Sandbox = true }
     };
 
     if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) options.AutoHideMenuBar = true;
@@ -132,8 +154,15 @@ static string ResolveAppDataPath()
     return Path.Combine(localAppData, "RasStudio");
 }
 
+static string GetApplicationVersion()
+{
+    return typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+}
+
 static void AddSettings(IServiceCollection services, string settingsFilePath)
 {
     services.AddSettingsWithSqlite(_ => $"Data Source={settingsFilePath}");
     services.AddRuntimeSettings<ApplicationSettings>();
 }
+
+public partial class Program;

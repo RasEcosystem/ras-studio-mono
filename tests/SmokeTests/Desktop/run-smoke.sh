@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUN_DIRECTORY="$(mktemp -d -t ras-studio-desktop-XXXXXX)"
 LOG_PATH="$RUN_DIRECTORY/desktop.log"
 APP_PID=""

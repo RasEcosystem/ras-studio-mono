@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUTPUT_DIRECTORY="${1:-$REPOSITORY_ROOT/artifacts/visual}"
 RUN_DIRECTORY="$(mktemp -d -t ras-studio-visual-XXXXXX)"
 APP_PID=""
@@ -141,6 +141,7 @@ for theme in "${themes[@]}"; do
         pages=(
             "ras-gates|/ras-gates"
             "clusters|/clusters"
+            "assistant|/assistant"
             "settings|/settings"
             "not-found|/not-found"
             "error|/error"

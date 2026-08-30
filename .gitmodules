@@ -1,3 +1,6 @@
 [submodule "src/RasHub.Contracts"]
 	path = src/RasHub.Contracts
 	url = https://github.com/RasEcosystem/ras-hub-contracts.git
+[submodule "src/RasMcp"]
+	path = src/RasMcp
+	url = https://github.com/RasEcosystem/ras-mcp.git

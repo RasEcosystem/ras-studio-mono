@@ -1,0 +1,23 @@
+@using RasStudio.Web.Infrastructure.Assistant
+@inject AssistantMarkdownRenderer MarkdownRenderer
+
+<div class="assistant-markdown">@_renderedHtml</div>
+
+@code {
+    private string? _lastMarkdown;
+    private MarkupString _renderedHtml;
+
+    [Parameter] public string Markdown { get; set; } = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastMarkdown = Markdown;
+        _renderedHtml = new MarkupString(MarkdownRenderer.ToSafeHtml(Markdown));
+    }
+
+}

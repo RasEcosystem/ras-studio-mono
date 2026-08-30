@@ -1,0 +1,436 @@
+@page "/assistant"
+@using System.Diagnostics
+@using System.Text
+@using Microsoft.Extensions.AI
+@using RasStudio.Application.Assistant
+@using RasStudio.Web.Infrastructure.Assistant
+@implements IAsyncDisposable
+@inject AssistantAgent Agent
+@inject AssistantConversationStore Conversation
+@inject IScrollListenerFactory ScrollListenerFactory
+@inject IScrollManager ScrollManager
+@inject ISnackbar Snackbar
+@inject ILogger<Assistant> Logger
+
+<AppPageTitle Title="Assistant"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="Assistant"
+              Subtitle="Chat with the RasStudio assistant"
+              Icon="@Icons.Material.Filled.Chat"
+              FillViewport>
+    <HeaderActions>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Outlined.DeleteOutline"
+                   Disabled="@(!CanClear)"
+                   OnClick="ClearConversation">
+            Clear chat
+        </MudButton>
+    </HeaderActions>
+
+    <ChildContent>
+        <div class="assistant-chat">
+            <MudPaper Class="assistant-chat__surface"
+                      Style="display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;"
+                      Elevation="1">
+                <div class="assistant-chat__messages-region">
+                    <section id="@MessagesContainerId"
+                             class="@MessagesContainerClass"
+                             aria-label="Conversation"
+                             aria-live="polite">
+                        @if (_messages.Count == 0)
+                        {
+                            <div class="assistant-chat__welcome">
+                                <MudAvatar Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Large">
+                                    <MudIcon Icon="@Icons.Material.Filled.AutoAwesome"/>
+                                </MudAvatar>
+
+                                <MudText Typo="Typo.h5">How can I help?</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    Send a message to start a conversation.
+                                </MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var message in _messages)
+                            {
+                                <article class="@GetMessageClass(message.Role)">
+                                    <MudAvatar Color="@GetAvatarColor(message.Role)"
+                                               Variant="Variant.Filled"
+                                               Size="Size.Small">
+                                        <MudIcon Icon="@GetAvatarIcon(message.Role)" Size="Size.Small"/>
+                                    </MudAvatar>
+
+                                    <div class="assistant-chat__message-content">
+                                        <MudText Typo="Typo.caption" Class="assistant-chat__message-author">
+                                            @(message.Role == AssistantMessageRole.User ? "You" : "Assistant")
+                                        </MudText>
+                                        <div class="assistant-chat__message-text">
+                                            @if (message.Role == AssistantMessageRole.Assistant)
+                                            {
+                                                <AssistantMessageContent Markdown="@message.Text"/>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body1">@message.Text</MudText>
+                                            }
+                                        </div>
+                                    </div>
+                                </article>
+                            }
+
+                            @if (_isReplyPending && !_hasStreamingContent)
+                            {
+                                <article class="assistant-chat__message assistant-chat__message--assistant">
+                                    <MudAvatar Color="Color.Secondary" Variant="Variant.Filled" Size="Size.Small">
+                                        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small"/>
+                                    </MudAvatar>
+
+                                    <div class="assistant-chat__message-content">
+                                        <MudText Typo="Typo.caption" Class="assistant-chat__message-author">
+                                            Assistant
+                                        </MudText>
+                                        <div class="assistant-chat__typing" aria-label="Assistant is typing">
+                                            <span></span>
+                                            <span></span>
+                                            <span></span>
+                                        </div>
+                                    </div>
+                                </article>
+                            }
+
+                            <div class="assistant-chat__bottom-anchor" aria-hidden="true"></div>
+                        }
+                    </section>
+
+                    @if (ShowJumpToLatest)
+                    {
+                        <div class="assistant-chat__jump-to-latest">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.ArrowDownward"
+                                       OnClick="ReturnToLatestAsync">
+                                Latest message
+                            </MudButton>
+                        </div>
+                    }
+                </div>
+
+                <MudDivider Style="flex: 0 0 auto;"/>
+
+                <div class="assistant-chat__composer">
+                    <div class="assistant-chat__composer-field">
+                        <MudTextField T="string"
+                                      @bind-Value="_draft"
+                                      Label="Message"
+                                      Placeholder="Ask the assistant anything…"
+                                      Variant="Variant.Outlined"
+                                      Lines="3"
+                                      Immediate="true"
+                                      Disabled="_isReplyPending"
+                                      OnKeyDown="HandleComposerKeyDownAsync"
+                                      FullWidth
+                                      AutoFocus="true"/>
+                    </div>
+
+                    <div class="assistant-chat__composer-hint">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Ctrl+Enter to send
+                        </MudText>
+                    </div>
+
+                    <div class="assistant-chat__composer-action">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Send"
+                                   Disabled="@(!CanSend)"
+                                   OnClick="SendAsync">
+                            Send
+                        </MudButton>
+                    </div>
+                </div>
+            </MudPaper>
+        </div>
+    </ChildContent>
+</AppPageShell>
+
+@code {
+    private const string MessagesContainerId = "assistant-chat-messages";
+    private const string MessagesContainerSelector = $"#{MessagesContainerId}";
+    private const int ScrollListenerReportRateMs = 50;
+    private const double BottomThresholdPixels = 48;
+    private static readonly TimeSpan SmoothScrollSettleDelay = TimeSpan.FromMilliseconds(500);
+
+    private readonly CancellationTokenSource _disposeCancellation = new();
+    private IScrollListener? _scrollListener;
+    private string? _draft;
+    private bool _isReplyPending;
+    private bool _hasStreamingContent;
+    private bool _scrollToBottomRequested;
+    private bool _isFollowingLatest = true;
+    private bool _isReturningToLatest;
+    private bool _hasUnseenMessages;
+
+    private IReadOnlyList<AssistantConversationMessage> _messages => Conversation.Messages;
+    private bool CanSend => !_isReplyPending && !string.IsNullOrWhiteSpace(_draft);
+    private bool CanClear => !_isReplyPending && _messages.Count > 0;
+    private bool ShowJumpToLatest => _messages.Count > 0 && !_isFollowingLatest && _hasUnseenMessages;
+
+    private string MessagesContainerClass => _isReplyPending
+        ? "assistant-chat__messages assistant-chat__messages--streaming"
+        : "assistant-chat__messages";
+
+    private Task HandleComposerKeyDownAsync(KeyboardEventArgs args)
+    {
+        return args.CtrlKey && args.Key == "Enter"
+            ? SendAsync()
+            : Task.CompletedTask;
+    }
+
+    private async Task SendAsync()
+    {
+        if (!CanSend)
+        {
+            return;
+        }
+
+        var prompt = _draft!.Trim();
+        var userMessage = Conversation.AddUser(prompt);
+        var chatHistory = Conversation.CreateChatHistorySnapshot();
+        _draft = string.Empty;
+        _isReplyPending = true;
+        RequestScrollToBottom(true);
+        AssistantConversationMessage? assistantMessage = null;
+        var responseUpdates = new List<ChatResponseUpdate>();
+        var responseText = new StringBuilder();
+        var lastRenderTimestamp = 0L;
+        var responseCompleted = false;
+
+        try
+        {
+            await foreach (var update in Agent.GetStreamingResponseAsync(
+                               chatHistory,
+                               _disposeCancellation.Token))
+            {
+                responseUpdates.Add(update);
+
+                if (string.IsNullOrEmpty(update.Text))
+                {
+                    continue;
+                }
+
+                var firstTextUpdate = assistantMessage is null;
+
+                if (firstTextUpdate)
+                {
+                    assistantMessage = Conversation.AddAssistant(string.Empty);
+                    _hasStreamingContent = true;
+                }
+
+                responseText.Append(update.Text);
+
+                if (firstTextUpdate ||
+                    Stopwatch.GetElapsedTime(lastRenderTimestamp) >= TimeSpan.FromMilliseconds(50))
+                {
+                    assistantMessage!.Text = responseText.ToString();
+                    lastRenderTimestamp = Stopwatch.GetTimestamp();
+                    RequestScrollToBottom();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+
+            var reply = responseText.ToString().Trim();
+
+            if (assistantMessage is null || reply.Length == 0)
+            {
+                throw new InvalidOperationException("The inference server returned an empty response.");
+            }
+
+            assistantMessage.Text = reply;
+            Conversation.AppendResponse(responseUpdates);
+            responseCompleted = true;
+            RequestScrollToBottom();
+        }
+        catch (OperationCanceledException) when (_disposeCancellation.IsCancellationRequested)
+        {
+            RemoveIncompleteExchange(userMessage, assistantMessage);
+            _hasUnseenMessages = false;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to get an assistant response.");
+            RemoveIncompleteExchange(userMessage, assistantMessage);
+            _hasUnseenMessages = false;
+            _draft = prompt;
+            Snackbar.Add(
+                "Unable to complete the assistant request. Check Assistant settings and the MCP server.",
+                Severity.Error);
+        }
+        finally
+        {
+            _isReplyPending = false;
+            _hasStreamingContent = false;
+
+            if (responseCompleted || _isFollowingLatest)
+            {
+                RequestScrollToBottom();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _scrollListener = ScrollListenerFactory.Create(
+                MessagesContainerSelector,
+                ScrollListenerReportRateMs);
+            _scrollListener.OnScroll += HandleMessagesScroll;
+        }
+
+        if (!firstRender && !_scrollToBottomRequested)
+        {
+            return;
+        }
+
+        _scrollToBottomRequested = false;
+        await ScrollManager.ScrollToBottomAsync(MessagesContainerSelector);
+    }
+
+    private void RequestScrollToBottom(bool force = false)
+    {
+        if (force)
+        {
+            _isFollowingLatest = true;
+            _isReturningToLatest = false;
+            _hasUnseenMessages = false;
+        }
+
+        if (_isFollowingLatest)
+        {
+            _scrollToBottomRequested = true;
+        }
+        else
+        {
+            _hasUnseenMessages = true;
+        }
+    }
+
+    private void HandleMessagesScroll(object? sender, ScrollEventArgs args)
+    {
+        _ = InvokeAsync(() => UpdateScrollState(args));
+    }
+
+    private void UpdateScrollState(ScrollEventArgs args)
+    {
+        var wasFollowingLatest = _isFollowingLatest;
+        var hadUnseenMessages = _hasUnseenMessages;
+
+        if (IsNearBottom(args))
+        {
+            _isFollowingLatest = true;
+            _isReturningToLatest = false;
+            _hasUnseenMessages = false;
+        }
+        else if (!_isReturningToLatest)
+        {
+            _isFollowingLatest = false;
+        }
+
+        if (wasFollowingLatest != _isFollowingLatest ||
+            hadUnseenMessages != _hasUnseenMessages)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private static bool IsNearBottom(ScrollEventArgs args)
+    {
+        return args.ScrollHeight - args.ClientHeight - args.ScrollTop <= BottomThresholdPixels;
+    }
+
+    private async Task ReturnToLatestAsync()
+    {
+        _isFollowingLatest = true;
+        _isReturningToLatest = true;
+        _hasUnseenMessages = false;
+        _scrollToBottomRequested = false;
+
+        await ScrollManager.ScrollToBottomAsync(MessagesContainerSelector, ScrollBehavior.Smooth);
+
+        try
+        {
+            await Task.Delay(SmoothScrollSettleDelay, _disposeCancellation.Token);
+
+            if (_scrollListener is not null)
+            {
+                var scrollData = await _scrollListener.GetCurrentScrollDataAsync();
+                await InvokeAsync(() =>
+                {
+                    _isReturningToLatest = false;
+                    UpdateScrollState(scrollData);
+                });
+            }
+        }
+        catch (OperationCanceledException) when (_disposeCancellation.IsCancellationRequested)
+        {
+            // The page was closed while the smooth scroll was settling.
+        }
+    }
+
+    private void ClearConversation()
+    {
+        if (CanClear)
+        {
+            Conversation.Clear();
+            _isFollowingLatest = true;
+            _isReturningToLatest = false;
+            _hasUnseenMessages = false;
+        }
+    }
+
+    private void RemoveIncompleteExchange(
+        AssistantConversationMessage userMessage,
+        AssistantConversationMessage? assistantMessage)
+    {
+        if (assistantMessage is not null)
+        {
+            Conversation.Remove(assistantMessage);
+        }
+
+        Conversation.Remove(userMessage);
+    }
+
+    private static string GetMessageClass(AssistantMessageRole role)
+    {
+        return $"assistant-chat__message assistant-chat__message--{role.ToString().ToLowerInvariant()}";
+    }
+
+    private static Color GetAvatarColor(AssistantMessageRole role)
+    {
+        return role == AssistantMessageRole.User ? Color.Primary : Color.Secondary;
+    }
+
+    private static string GetAvatarIcon(AssistantMessageRole role)
+    {
+        return role == AssistantMessageRole.User
+            ? Icons.Material.Filled.Person
+            : Icons.Material.Filled.AutoAwesome;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeCancellation.Cancel();
+
+        if (_scrollListener is not null)
+        {
+            _scrollListener.OnScroll -= HandleMessagesScroll;
+            await _scrollListener.DisposeAsync();
+        }
+
+        _disposeCancellation.Dispose();
+    }
+
+}
