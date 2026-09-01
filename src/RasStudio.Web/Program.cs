@@ -1,80 +1,171 @@
 using ElectronNET;
 using ElectronNET.API;
 using ElectronNET.API.Entities;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.AI;
 using MudBlazor.Services;
 using Nava.Settings.DependencyInjection;
 using Nava.Settings.Extensions;
+using RasMcp.Extensions;
+using RasStudio.Application.Assistant;
 using RasStudio.Application.Settings;
+using RasStudio.Infrastructure;
+using RasStudio.Infrastructure.Assistant;
+using RasStudio.Web;
+using RasStudio.Web.Infrastructure.Assistant;
+using RasStudio.Web.Infrastructure.Diagnostics;
+using RasStudio.Web.Infrastructure.Logging;
+using Serilog;
+using Serilog.Events;
 using App = RasStudio.Web.Components.App;
 
 const string settingsFileName = "settings.db";
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
-var appDataPath = ResolveAppDataPath();
-Directory.CreateDirectory(appDataPath);
-
-AddSettings(builder.Services, Path.Combine(appDataPath, settingsFileName));
-
-builder.Services.AddMudServices();
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
-var electronDisabled = builder.Configuration.GetValue<bool>("Desktop:DisableElectron");
-
-if (electronDisabled)
+try
 {
-    var diagnosticPort = builder.Configuration.GetValue<int?>("Desktop:DiagnosticPort") ?? 0;
-    builder.WebHost.UseUrls($"http://127.0.0.1:{diagnosticPort}");
+    var builder = WebApplication.CreateBuilder(args);
+
+    var appDataPath = ResolveAppDataPath(builder.Configuration);
+    var logDirectory = Path.Combine(appDataPath, "logs");
+    Directory.CreateDirectory(appDataPath);
+    Directory.CreateDirectory(logDirectory);
+
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton<ApplicationDiagnostics>();
+
+    builder.Host.UseSerilog((context, services, configuration) =>
+    {
+        var fileOptions = FileLoggingOptions.Load(context.Configuration);
+
+        configuration
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty(
+                "Environment",
+                context.HostingEnvironment.EnvironmentName)
+            .WriteTo.File(
+                Path.Combine(logDirectory, "rasstudio-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: fileOptions.RetainedFileCountLimit,
+                fileSizeLimitBytes: fileOptions.FileSizeLimitBytes,
+                rollOnFileSizeLimit: true,
+                buffered: false,
+                shared: false,
+                outputTemplate: ApplicationLoggingExtensions.OutputTemplate)
+            .WriteTo.Sink(
+                services.GetRequiredService<ApplicationDiagnostics>(),
+                LogEventLevel.Warning);
+    });
+
+    builder.Services
+        .AddDataProtection()
+        .SetApplicationName("RasStudio Mono")
+        .PersistKeysToFileSystem(
+            new DirectoryInfo(Path.Combine(appDataPath, "protection-keys")));
+
+    AddSettings(builder.Services, Path.Combine(appDataPath, settingsFileName));
+    builder.Services.AddRasStudioInfrastructure();
+
+    builder.Services.AddSingleton<AssistantConversationStore>();
+    builder.Services.AddSingleton<AssistantMarkdownRenderer>();
+    builder.Services.AddSingleton<RasMcpAccessToken>();
+    builder.Services.AddSingleton<RasStudioMcpClient>();
+    builder.Services.AddSingleton<AssistantAgent>();
+    builder.Services.AddSingleton<IChatClient, ConfiguredChatClient>();
+    builder.Services.AddRasMcp(options =>
+    {
+        options.Name = "RasStudio Mono";
+        options.Version = RasStudioVersion.Display;
+        options.Description = "Desktop application for managing RAS infrastructure.";
+    });
+    builder.Services.AddMudServices();
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
+
+    var electronDisabled = builder.Configuration.GetValue<bool>("Desktop:DisableElectron");
+
+    if (electronDisabled)
+    {
+        var diagnosticPort = builder.Configuration.GetValue<int?>("Desktop:DiagnosticPort") ?? 0;
+        builder.WebHost.UseUrls($"http://127.0.0.1:{diagnosticPort}");
+    }
+    else
+    {
+        builder.Services.AddElectron();
+        ElectronNetRuntime.ElectronExtraArguments =
+            builder.Configuration["Desktop:ElectronArguments"] ?? string.Empty;
+        builder.UseElectron(
+            args,
+            services => CreateDesktopWindowAsync(
+                services.GetRequiredService<IConfiguration>()));
+    }
+
+    var app = builder.Build();
+
+    await app.Services.InitializeApplicationSettingsAsync();
+    var mcpAccessToken = app.Services.GetRequiredService<RasMcpAccessToken>();
+
+    app.ConfigureRequestLogging();
+
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/mcp") &&
+            !mcpAccessToken.IsAuthorized(context.Request.Headers.Authorization.ToString()))
+        {
+            context.Response.Headers.WWWAuthenticate = "Bearer";
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        var headers = context.Response.Headers;
+        headers["Content-Security-Policy"] =
+            "default-src 'self'; " +
+            "base-uri 'self'; " +
+            "connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*; " +
+            "font-src 'self' data:; " +
+            "frame-ancestors 'none'; " +
+            "form-action 'self'; " +
+            "img-src 'self' data:; " +
+            "object-src 'none'; " +
+            "script-src 'self' 'unsafe-inline'; " +
+            "style-src 'self' 'unsafe-inline'";
+        headers["Permissions-Policy"] =
+            "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = "DENY";
+
+        await next();
+    });
+
+    if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/error", true);
+
+    app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    app.UseAntiforgery();
+
+    app.MapStaticAssets();
+    app.MapRasMcp();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    app.ConfigureLifecycleLogging(logDirectory);
+    await app.RunAsync();
+    return 0;
 }
-else
+catch (Exception exception) when (exception is not HostAbortedException)
 {
-    builder.Services.AddElectron();
-    ElectronNetRuntime.ElectronExtraArguments =
-        builder.Configuration["Desktop:ElectronArguments"] ?? string.Empty;
-    builder.UseElectron(
-        args,
-        services => CreateDesktopWindowAsync(
-            services.GetRequiredService<IConfiguration>()));
+    Log.Fatal(exception, "RasStudio Mono terminated unexpectedly");
+    return 1;
 }
-
-var app = builder.Build();
-
-await app.Services.InitializeApplicationSettingsAsync();
-
-app.Use(async (context, next) =>
+finally
 {
-    var headers = context.Response.Headers;
-    headers["Content-Security-Policy"] =
-        "default-src 'self'; " +
-        "base-uri 'self'; " +
-        "connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*; " +
-        "font-src 'self' data:; " +
-        "frame-ancestors 'none'; " +
-        "form-action 'self'; " +
-        "img-src 'self' data:; " +
-        "object-src 'none'; " +
-        "script-src 'self' 'unsafe-inline'; " +
-        "style-src 'self' 'unsafe-inline'";
-    headers["Permissions-Policy"] =
-        "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
-    headers["Referrer-Policy"] = "no-referrer";
-    headers["X-Content-Type-Options"] = "nosniff";
-    headers["X-Frame-Options"] = "DENY";
-
-    await next();
-});
-
-if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/error", true);
-
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseAntiforgery();
-
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.Run();
+    await Log.CloseAndFlushAsync();
+}
 
 static async Task CreateDesktopWindowAsync(IConfiguration configuration)
 {
@@ -91,12 +182,7 @@ static async Task CreateDesktopWindowAsync(IConfiguration configuration)
         Title = "RasStudio Mono",
         IsRunningBlazor = true,
         BackgroundColor = "#20252B",
-        WebPreferences = new WebPreferences
-        {
-            NodeIntegration = false,
-            ContextIsolation = true,
-            Sandbox = true
-        }
+        WebPreferences = new WebPreferences { NodeIntegration = false, ContextIsolation = true, Sandbox = true }
     };
 
     if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) options.AutoHideMenuBar = true;
@@ -118,9 +204,10 @@ static async Task CloseSmokeTestWindowAsync(BrowserWindow window)
     window.Close();
 }
 
-static string ResolveAppDataPath()
+static string ResolveAppDataPath(IConfiguration configuration)
 {
-    var overridePath = Environment.GetEnvironmentVariable("APP_PATH");
+    var overridePath = configuration["RasStudio:AppDataPath"] ??
+                       Environment.GetEnvironmentVariable("APP_PATH");
 
     if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);
 
@@ -137,3 +224,5 @@ static void AddSettings(IServiceCollection services, string settingsFilePath)
     services.AddSettingsWithSqlite(_ => $"Data Source={settingsFilePath}");
     services.AddRuntimeSettings<ApplicationSettings>();
 }
+
+public partial class Program;

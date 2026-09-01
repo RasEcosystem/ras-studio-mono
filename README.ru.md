@@ -97,7 +97,8 @@ ElectronNET.Core. Результаты сохраняются в `artifacts/desk
 make test
 ```
 
-Он включает Release-сборку, screenshots всех тем в desktop/mobile-размерах и
+Он включает Release-сборку, unit- и integration-тесты, проверку защищённого
+встроенного MCP endpoint, screenshots всех тем в desktop/mobile-размерах и
 настоящую headless Electron lifecycle-проверку. Она подтверждает, что Kestrel
 слушает только `127.0.0.1` и завершается после закрытия desktop-окна.
 

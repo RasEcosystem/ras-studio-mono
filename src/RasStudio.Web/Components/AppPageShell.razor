@@ -32,7 +32,7 @@
                 }
             </header>
 
-            <MudDivider/>
+            <MudDivider Style="flex: 0 0 auto;"/>
         }
 
         <div class="app-page-content">
@@ -47,6 +47,7 @@
     [Parameter] public string? Subtitle { get; set; }
     [Parameter] public string? Icon { get; set; }
     [Parameter] public string? Class { get; set; }
+    [Parameter] public bool FillViewport { get; set; }
     [Parameter] public RenderFragment? HeaderActions { get; set; }
     [Parameter] [EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
 
@@ -56,7 +57,13 @@
         !string.IsNullOrWhiteSpace(Icon) ||
         HeaderActions is not null;
 
-    private string RootClass =>
-        $"app-page app-page--{Width.ToString().ToLowerInvariant()} {Class}".TrimEnd();
+    private string RootClass
+    {
+        get
+        {
+            var fillClass = FillViewport ? "app-page--fill" : string.Empty;
+            return $"app-page app-page--{Width.ToString().ToLowerInvariant()} {fillClass} {Class}".TrimEnd();
+        }
+    }
 
 }

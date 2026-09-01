@@ -1,71 +1,129 @@
 @page "/"
+@implements IAsyncDisposable
+@inject IRasGateService RasGateService
+@inject IRasHubConnectionSettings ConnectionSettings
+@inject ApplicationDiagnostics Diagnostics
+@inject TimeProvider TimeProvider
+@inject ILogger<Home> Logger
 
 <AppPageTitle Title="Home"/>
 
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Home"
-              Subtitle="Administration and monitoring of your 1C:Enterprise environments"
-              Icon="@Icons.Material.Filled.Home">
+              Subtitle="1C:Enterprise infrastructure management"
+              Icon="@Icons.Material.Filled.Home"
+              Class="home-page">
+    <MudStack Spacing="6">
+        <div class="home-card-grid">
+            <div class="home-card">
+                <MetricCard Title="Warnings"
+                            Value="@Diagnostics.WarningCount.ToString("N0")"
+                            Detail="Since Studio process start"
+                            Icon="@Icons.Material.Outlined.Warning"
+                            Color="Color.Warning"
+                            ValueHref="/health-events?level=warnings"
+                            ValueAriaLabel="View application warnings"/>
+            </div>
+            <div class="home-card">
+                <MetricCard Title="Errors"
+                            Value="@Diagnostics.ErrorCount.ToString("N0")"
+                            Detail="Since Studio process start"
+                            Icon="@Icons.Material.Outlined.ErrorOutline"
+                            Color="Color.Error"
+                            ValueHref="/health-events?level=errors"
+                            ValueAriaLabel="View application errors"/>
+            </div>
+        </div>
 
-    <MudGrid Spacing="3">
-        @foreach (var metric in OverviewMetrics)
-        {
-            <MudItem xs="12" sm="6" lg="3">
-                <MudPaper Class="app-card" Style="height: 100%;" Elevation="1">
-                    <MudStack Spacing="3" Style="height: 100%;">
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                            <MudAvatar Color="@metric.Color" Variant="Variant.Outlined" Size="Size.Medium">
-                                <MudIcon Icon="@metric.Icon"/>
-                            </MudAvatar>
-
-                            <MudText Typo="Typo.subtitle1">@metric.Title</MudText>
-                        </MudStack>
-
-                        <a class="metric-value-link"
-                           href="@metric.ValueHref"
-                           aria-label="@metric.ValueAriaLabel">
-                            <MudText Typo="Typo.h3">@metric.Value</MudText>
-                        </a>
-
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            @metric.Description
-                        </MudText>
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-        }
-    </MudGrid>
+        <div class="home-card-grid">
+            <div class="home-card">
+                <MetricCard Title="RasGates"
+                            Value="@_rasGateCount"
+                            Detail="@RasGateDetail"
+                            Icon="@Icons.Material.Filled.SettingsEthernet"
+                            Color="Color.Primary"
+                            ValueHref="/ras-gates"
+                            ValueAriaLabel="View RasGates"/>
+            </div>
+            <div class="home-card">
+                <MetricCard Title="Clusters"
+                            Value="0"
+                            Detail="Discovered 1C:Enterprise clusters"
+                            Icon="@Icons.Material.Filled.Storage"
+                            Color="Color.Primary"
+                            ValueHref="/clusters"
+                            ValueAriaLabel="View clusters"/>
+            </div>
+        </div>
+    </MudStack>
 </AppPageShell>
 
 @code {
+    private readonly CancellationTokenSource _disposeToken = new();
+    private Task _pollTask = Task.CompletedTask;
+    private string _rasGateCount = "—";
 
-    private static readonly IReadOnlyList<OverviewMetric> OverviewMetrics =
-    [
-        new(
-            "RasGates",
-            "0",
-            "Gateways available through RasHub",
-            Icons.Material.Filled.SettingsEthernet,
-            Color.Primary,
-            "/ras-gates",
-            "View RasGates"),
-        new(
-            "Clusters",
-            "0",
-            "Discovered 1C:Enterprise clusters",
-            Icons.Material.Filled.Storage,
-            Color.Primary,
-            "/clusters",
-            "View clusters")
-    ];
+    private string RasGateDetail => ConnectionSettings.Current.IsConfigured
+        ? "Gateways registered in RasHub"
+        : "Connect RasHub in Settings";
 
-    private sealed record OverviewMetric(
-        string Title,
-        string Value,
-        string Description,
-        string Icon,
-        Color Color,
-        string ValueHref,
-        string ValueAriaLabel);
+    protected override async Task OnInitializedAsync()
+    {
+        if (ConnectionSettings.Current.IsConfigured)
+        {
+            try
+            {
+                var page = await RasGateService.GetPageAsync(
+                    1,
+                    1,
+                    cancellationToken: _disposeToken.Token);
+                _rasGateCount = page.TotalCount.ToString("N0");
+            }
+            catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                Logger.LogWarning(exception, "Unable to load the RasGate dashboard count");
+            }
+        }
+
+        _pollTask = PollDiagnosticsAsync();
+    }
+
+    private async Task PollDiagnosticsAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), TimeProvider);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(() =>
+                {
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Home diagnostics polling stopped unexpectedly");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeToken.Cancel();
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
+    }
 
 }

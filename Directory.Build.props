@@ -1,8 +1,12 @@
 <Project>
+    <PropertyGroup>
+        <NBGV_ThisAssemblyIncludesPackageVersion>true</NBGV_ThisAssemblyIncludesPackageVersion>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="Nerdbank.GitVersioning"
                           Condition="'$(MSBuildProjectName)' != 'RasHub.Contracts'"
-                          Version="3.10.91"
+                          Version="3.10.94"
                           PrivateAssets="all"/>
     </ItemGroup>
 </Project>

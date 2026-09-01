@@ -1,7 +1,4 @@
 @page "/settings"
-@inject ISettingsProvider<ApplicationSettings> SettingsProvider
-@inject ISnackbar Snackbar
-@inject ILogger<Settings> Logger
 
 <AppPageTitle Title="Settings"/>
 
@@ -9,96 +6,17 @@
               Title="Settings"
               Subtitle="Customize RasStudio Mono on this device"
               Icon="@Icons.Material.Filled.Settings">
+    <MudTabs Elevation="0" Rounded="true">
+        <MudTabPanel Text="General" Icon="@Icons.Material.Outlined.Tune">
+            <ApplicationSettingsPanel/>
+        </MudTabPanel>
 
-    <MudForm Model="_settings"
-             @ref="_form"
-             ValidationDelay="0">
+        <MudTabPanel Text="RasHub" Icon="@Icons.Material.Outlined.Hub">
+            <RasHubSettingsPanel/>
+        </MudTabPanel>
 
-        <MudPaper Class="app-card" Elevation="1">
-            <MudStack Spacing="4">
-                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                    <MudIcon Icon="@Icons.Material.Outlined.Palette"
-                             Size="Size.Small"
-                             Color="Color.Primary"/>
-
-                    <MudText Typo="Typo.h5">Appearance</MudText>
-                </MudStack>
-
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Choose the visual theme used throughout the application.
-                </MudText>
-
-                <MudSelect T="AppTheme"
-                           Label="Theme"
-                           Variant="Variant.Outlined"
-                           FullWidth
-                           @bind-Value="_settings.Theme">
-                    <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.System">System default</MudSelectItem>
-                </MudSelect>
-            </MudStack>
-        </MudPaper>
-
-        <MudStack Row
-                  Wrap="Wrap.Wrap"
-                  Justify="Justify.FlexEnd"
-                  Spacing="2"
-                  Class="mt-3">
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Outlined.Save"
-                       Disabled="_saving"
-                       OnClick="@SaveAsync">
-                @(_saving ? "Saving…" : "Save changes")
-            </MudButton>
-        </MudStack>
-    </MudForm>
+        <MudTabPanel Text="Assistant" Icon="@Icons.Material.Outlined.Chat">
+            <AssistantSettingsPanel/>
+        </MudTabPanel>
+    </MudTabs>
 </AppPageShell>
-
-@code {
-    private MudForm _form = null!;
-    private ApplicationSettings _settings = new();
-    private bool _saving;
-
-    protected override void OnInitialized()
-    {
-        _settings = new ApplicationSettings
-        {
-            Theme = SettingsProvider.Settings.Theme
-        };
-    }
-
-    private async Task SaveAsync()
-    {
-        if (_saving)
-        {
-            return;
-        }
-
-        await _form.ValidateAsync();
-
-        if (!_form.IsValid)
-        {
-            return;
-        }
-
-        try
-        {
-            _saving = true;
-            await SettingsProvider.UpdateAsync(_settings);
-            Snackbar.Add("Preferences saved.", Severity.Success);
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Unable to save local settings.");
-            Snackbar.Add("Unable to save preferences.", Severity.Error);
-        }
-        finally
-        {
-            _saving = false;
-        }
-    }
-
-}

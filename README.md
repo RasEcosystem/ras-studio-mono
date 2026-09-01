@@ -96,9 +96,11 @@ Run the full available verification suite:
 make test
 ```
 
-The suite builds Release, captures all themes in desktop/mobile viewports, and
-runs a real headless Electron lifecycle check that verifies Kestrel binds only
-to `127.0.0.1` and exits when the desktop window closes.
+The suite builds Release, runs unit and integration tests, verifies the
+authenticated embedded MCP endpoint, captures all themes in desktop/mobile
+viewports, and runs a real headless Electron lifecycle check. The lifecycle
+check verifies that Kestrel binds only to `127.0.0.1` and exits when the desktop
+window closes.
 
 ## Related projects
 

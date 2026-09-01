@@ -19,6 +19,22 @@
     padding-inline: 2rem;
 }
 
+.app-page--fill {
+    height: calc(100dvh - 4rem);
+    overflow: hidden;
+}
+
+.app-page--fill .app-page-inner {
+    height: 100%;
+    min-height: 0;
+}
+
+.app-page--fill .app-page-content {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
 .app-page-inner,
 .app-page-content,
 .app-page-heading {

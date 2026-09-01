@@ -13,7 +13,7 @@ Requires:
 Run:
 
 ```bash
-tests/visual/run-screenshots.sh
+tests/SmokeTests/Visual/run-screenshots.sh
 ```
 
 Screenshots are saved to `artifacts/visual`.

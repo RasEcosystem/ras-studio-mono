@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUN_DIRECTORY="$(mktemp -d -t ras-studio-desktop-XXXXXX)"
 LOG_PATH="$RUN_DIRECTORY/desktop.log"
 APP_PID=""
@@ -96,7 +96,9 @@ for _ in {1..240}; do
             exit "$exit_code"
         fi
 
-        if ! grep -q "Now listening on: http://127.0.0.1:" "$LOG_PATH"; then
+        if ! grep -q \
+            "RasStudio Mono started successfully and is listening on http://127.0.0.1:" \
+            "$LOG_PATH"; then
             echo "Kestrel did not bind to the loopback interface." >&2
             cat "$LOG_PATH" >&2
             exit 1
@@ -109,6 +111,22 @@ for _ in {1..240}; do
         fi
 
         test -s "$RUN_DIRECTORY/settings/settings.db"
+
+        log_files=("$RUN_DIRECTORY/settings/logs"/rasstudio-*.log)
+
+        if [[ ! -s "${log_files[0]}" ]]; then
+            echo "Rolling application log was not created." >&2
+            cat "$LOG_PATH" >&2
+            exit 1
+        fi
+
+        if ! rg --quiet 'RasStudio Mono started successfully' "${log_files[@]}" ||
+            ! rg --quiet 'RasStudio Mono stopped successfully' "${log_files[@]}"; then
+            echo "Application lifecycle was not written to the rolling log." >&2
+            cat "${log_files[@]}" >&2
+            exit 1
+        fi
+
         echo "Desktop lifecycle smoke test passed."
         exit 0
     fi

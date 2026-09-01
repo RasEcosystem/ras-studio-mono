@@ -7,7 +7,7 @@ the local Kestrel backend with it.
 Run on Linux with:
 
 ```bash
-tests/desktop/run-smoke.sh
+tests/SmokeTests/Desktop/run-smoke.sh
 ```
 
 The `--no-sandbox` Electron argument is used only by this isolated headless test.

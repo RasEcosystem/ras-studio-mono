@@ -1,0 +1,246 @@
+@inject IRasHubConnectionSettings ConnectionSettings
+@inject IRasGateService RasGateService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<RasHubSettingsPanel> Logger
+
+<MudForm @ref="_form" ValidationDelay="0">
+    <MudPaper Class="app-card" Elevation="1">
+        <MudStack Spacing="4">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Outlined.Hub"
+                         Size="Size.Small"
+                         Color="Color.Primary"/>
+                <MudText Typo="Typo.h5">RasHub connection</MudText>
+            </MudStack>
+
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                RasStudio uses the RasHub public API to manage RasGate registrations.
+                The user API key is encrypted locally and is never displayed again.
+            </MudText>
+
+            <MudTextField T="string"
+                          @bind-Value="_hubUrl"
+                          Label="RasHub URL"
+                          Placeholder="http://rashub.example.net"
+                          HelperText="Enter the server root or a reverse-proxy base path; do not append /api/v1."
+                          Variant="Variant.Outlined"
+                          Required
+                          RequiredError="RasHub URL is required"
+                          Validation="@(new Func<string?, string?>(ValidateHubUrl))"
+                          Immediate/>
+
+            <MudTextField T="string"
+                          @bind-Value="_hubApiKey"
+                          Label="@(_connection.HasApiKey ? "New user API key" : "User API key")"
+                          HelperText="@ApiKeyHelperText"
+                          Variant="Variant.Outlined"
+                          InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showApiKey
+                                             ? Icons.Material.Outlined.VisibilityOff
+                                             : Icons.Material.Outlined.Visibility)"
+                          OnAdornmentClick="ToggleApiKeyVisibility"
+                          Validation="@(new Func<string?, string?>(ValidateHubApiKey))"
+                          MaxLength="64"
+                          Immediate/>
+
+            <MudAlert Severity="@(_connection.IsConfigured ? Severity.Success : Severity.Info)"
+                      Variant="Variant.Outlined"
+                      Dense>
+                @(_connection.IsConfigured
+                    ? $"A RasHub connection is saved for {_connection.BaseUrl}."
+                    : "Save a RasHub URL and a user API key to enable gateway management.")
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <MudStack Row
+              Wrap="Wrap.Wrap"
+              Justify="Justify.FlexEnd"
+              Spacing="2"
+              Class="mt-3">
+        @if (_connection.IsConfigured)
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Outlined.LinkOff"
+                       Disabled="@(_saving || _testing)"
+                       OnClick="DisconnectAsync">
+                Remove connection
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.WifiTethering"
+                       Disabled="@(_saving || _testing)"
+                       OnClick="TestConnectionAsync">
+                @(_testing ? "Testing…" : "Test connection")
+            </MudButton>
+        }
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.Save"
+                   Disabled="@(_saving || _testing)"
+                   OnClick="SaveAsync">
+            @(_saving ? "Saving…" : "Save connection")
+        </MudButton>
+    </MudStack>
+</MudForm>
+
+@code {
+    private MudForm _form = null!;
+    private RasHubConnectionState _connection = new(string.Empty, false);
+    private string _hubUrl = string.Empty;
+    private string? _hubApiKey;
+    private bool _showApiKey;
+    private bool _saving;
+    private bool _testing;
+
+    private string ApiKeyHelperText => _connection.HasApiKey
+        ? "Leave empty to keep the saved key, or enter a replacement."
+        : "Use a RasHub user API key with permission to manage RasGates.";
+
+    protected override void OnInitialized()
+    {
+        RefreshConnectionState();
+    }
+
+    private void RefreshConnectionState()
+    {
+        _connection = ConnectionSettings.Current;
+        _hubUrl = _connection.BaseUrl;
+        _hubApiKey = null;
+        _showApiKey = false;
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        _showApiKey = !_showApiKey;
+    }
+
+    private static string? ValidateHubUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "RasHub URL is required";
+
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(uri.Host))
+            return "Enter an absolute HTTP or HTTPS URL";
+
+        if (!string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+            return "URL cannot contain credentials, a query, or a fragment";
+
+        return null;
+    }
+
+    private string? ValidateHubApiKey(string? value)
+    {
+        if (!_connection.HasApiKey && string.IsNullOrWhiteSpace(value))
+            return "RasHub user API key is required";
+        if (value is not null &&
+            !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            return "API key cannot contain leading or trailing whitespace";
+        if (value?.Length > 64)
+            return "RasHub user API key cannot exceed 64 characters";
+
+        return null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+            return;
+
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        try
+        {
+            _saving = true;
+            await ConnectionSettings.SaveAsync(new SaveRasHubConnection(
+                _hubUrl,
+                string.IsNullOrEmpty(_hubApiKey) ? null : _hubApiKey));
+            RefreshConnectionState();
+            Snackbar.Add("RasHub connection saved.", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to save the RasHub connection");
+            Snackbar.Add(GetErrorMessage(exception, "Unable to save the RasHub connection."), Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (_testing)
+            return;
+
+        try
+        {
+            _testing = true;
+            var page = await RasGateService.GetPageAsync(1, 1);
+            Logger.LogInformation(
+                "RasHub connection test succeeded with {RasGateCount} RasGate registrations",
+                page.TotalCount);
+            Snackbar.Add(
+                $"Connected to RasHub. {page.TotalCount:N0} RasGate registration(s) available.",
+                Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "RasHub connection test failed");
+            Snackbar.Add(GetErrorMessage(exception, "Unable to connect to RasHub."), Severity.Error);
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+
+    private async Task DisconnectAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove RasHub connection?",
+            "The saved URL and user API key will be removed from this device.",
+            "Remove",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await ConnectionSettings.ClearAsync();
+            RefreshConnectionState();
+            Snackbar.Add("RasHub connection removed.", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to remove the RasHub connection");
+            Snackbar.Add("Unable to remove the RasHub connection.", Severity.Error);
+        }
+    }
+
+    private static string GetErrorMessage(Exception exception, string fallback)
+    {
+        return exception switch
+        {
+            RasHubApiException apiException when apiException.TraceId is not null =>
+                $"{apiException.Message} Trace: {apiException.TraceId}",
+            RasHubApiException apiException => apiException.Message,
+            RasHubConnectionValidationException validationException => validationException.Message,
+            _ => fallback
+        };
+    }
+
+}
