@@ -19,7 +19,7 @@
         <ElectronPackageId>com.rasecosystem.rasstudio-mono</ElectronPackageId>
         <ElectronSingleInstance>true</ElectronSingleInstance>
         <ElectronVersion>43.4.0</ElectronVersion>
-        <ElectronBuilderVersion>26.0</ElectronBuilderVersion>
+        <ElectronBuilderVersion>26.15.3</ElectronBuilderVersion>
         <ElectronIcon>Assets\rasstudio.ico</ElectronIcon>
         <ApplicationIcon>Assets\rasstudio.ico</ApplicationIcon>
     </PropertyGroup>
@@ -28,6 +28,12 @@
         <None Include=".electron\custom_main.js"
               CopyToOutputDirectory="PreserveNewest"
               TargetPath=".electron\custom_main.js"/>
+        <None Include="ElectronShims\ImageSize\index.js"
+              CopyToOutputDirectory="PreserveNewest"
+              TargetPath=".electron\ImageSizeShim\index.js"/>
+        <None Include="ElectronShims\ImageSize\manifest.json"
+              CopyToOutputDirectory="PreserveNewest"
+              TargetPath=".electron\ImageSizeShim\package.json"/>
         <None Update="Assets\rasstudio.ico" CopyToOutputDirectory="PreserveNewest"/>
         <None Update="Assets\rasstudio.png" CopyToOutputDirectory="PreserveNewest"/>
         <None Update="Assets\rasstudio-window.png" CopyToOutputDirectory="PreserveNewest"/>
@@ -51,5 +57,13 @@
         <ProjectReference Include="..\RasStudio.Application\RasStudio.Application.csproj"/>
         <ProjectReference Include="..\RasStudio.Infrastructure\RasStudio.Infrastructure.csproj"/>
     </ItemGroup>
+
+    <Target Name="RasStudioCreateElectronPackageJson"
+            AfterTargets="ElectronCreatePackageJson">
+        <ReplaceTemplateTask
+            TemplateFile="$(MSBuildProjectDirectory)\Properties\electron-package.template.json"
+            OutputFile="$(ElectronIntermediatePackageJson)"
+            TemplateProperties="@(TemplateProperty)"/>
+    </Target>
 
 </Project>

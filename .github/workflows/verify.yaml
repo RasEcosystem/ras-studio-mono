@@ -9,6 +9,8 @@ on:
     branches:
       - dev
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 concurrency:
@@ -68,3 +70,24 @@ jobs:
           --no-build
           --no-restore
           -m:1
+
+      - name: Audit Electron dependencies
+        run: make electron-audit
+
+      - name: Verify visual rendering
+        run: make visual CONFIGURATION=Release
+
+      - name: Verify embedded MCP
+        run: make mcp-smoke CONFIGURATION=Release
+
+      - name: Verify unpackaged desktop lifecycle
+        run: xvfb-run -a env CONFIGURATION=Release tests/SmokeTests/Desktop/run-smoke.sh
+
+      - name: Build Linux package
+        run: make package-linux
+
+      - name: Audit packaged dependencies
+        run: make package-audit
+
+      - name: Verify packaged desktop lifecycle
+        run: xvfb-run -a tests/SmokeTests/Desktop/run-packaged-linux-smoke.sh

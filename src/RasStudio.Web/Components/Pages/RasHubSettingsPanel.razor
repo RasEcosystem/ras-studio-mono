@@ -1,5 +1,5 @@
 @inject IRasHubConnectionSettings ConnectionSettings
-@inject IRasGateService RasGateService
+@inject IRasHubConnectionTester ConnectionTester
 @inject IRasHubInfoService RasHubInfoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -70,15 +70,15 @@
                        OnClick="DisconnectAsync">
                 Remove connection
             </MudButton>
-
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Outlined.WifiTethering"
-                       Disabled="@(_saving || _testing)"
-                       OnClick="TestConnectionAsync">
-                @(_testing ? "Testing…" : "Test connection")
-            </MudButton>
         }
+
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.WifiTethering"
+                   Disabled="@(_saving || _testing)"
+                   OnClick="TestConnectionAsync">
+            @(_testing ? "Testing…" : "Test current values")
+        </MudButton>
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
@@ -187,19 +187,37 @@
         if (!_form.IsValid)
             return;
 
+        var saved = false;
+
         try
         {
             _saving = true;
             await ConnectionSettings.SaveAsync(new SaveRasHubConnection(
                 _hubUrl,
                 string.IsNullOrEmpty(_hubApiKey) ? null : _hubApiKey));
+            saved = true;
             RefreshConnectionState();
-            Snackbar.Add("RasHub connection saved.", Severity.Success);
+            var info = await RasHubInfoService.GetAsync();
+            EnsureSupportedVersion(info.Version);
+            Snackbar.Add(
+                $"RasHub {info.Version} connection saved and verified.",
+                Severity.Success);
         }
         catch (Exception exception)
         {
-            Logger.LogError(exception, "Unable to save the RasHub connection");
-            Snackbar.Add(GetErrorMessage(exception, "Unable to save the RasHub connection."), Severity.Error);
+            Logger.LogError(
+                exception,
+                saved
+                    ? "RasHub connection was saved but verification failed"
+                    : "Unable to save the RasHub connection");
+            var message = GetErrorMessage(
+                exception,
+                saved
+                    ? "Unable to verify RasHub."
+                    : "Unable to save the RasHub connection.");
+            Snackbar.Add(
+                saved ? $"Connection saved, but verification failed: {message}" : message,
+                saved ? Severity.Warning : Severity.Error);
         }
         finally
         {
@@ -215,15 +233,19 @@
         try
         {
             _testing = true;
-            var info = await RasHubInfoService.GetAsync();
-            EnsureSupportedVersion(info.Version);
-            var page = await RasGateService.GetPageAsync(1, 1);
+            await _form.ValidateAsync();
+            if (!_form.IsValid)
+                return;
+
+            var result = await ConnectionTester.TestAsync(new SaveRasHubConnection(
+                _hubUrl,
+                string.IsNullOrEmpty(_hubApiKey) ? null : _hubApiKey));
             Logger.LogInformation(
                 "RasHub {RasHubVersion} connection test succeeded with {RasGateCount} RasGate registrations",
-                info.Version,
-                page.TotalCount);
+                result.Version,
+                result.RasGateCount);
             Snackbar.Add(
-                $"Connected to RasHub {info.Version}. {page.TotalCount:N0} RasGate registration(s) available.",
+                $"Connected to RasHub {result.Version}. {result.RasGateCount:N0} RasGate registration(s) available.",
                 Severity.Success);
         }
         catch (Exception exception)

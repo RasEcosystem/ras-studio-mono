@@ -16,6 +16,7 @@ public sealed class RasHubApiClient(
 {
     private const string ApiKeyHeaderName = "X-Api-Key";
     private const string TraceIdHeaderName = "X-Trace-Id";
+    private const long MaxResponseContentBytes = 16 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
@@ -32,7 +33,20 @@ public sealed class RasHubApiClient(
             body,
             cancellationToken);
 
-        return map(data);
+        try
+        {
+            return map(data);
+        }
+        catch (Exception exception) when (exception is
+                   JsonException or
+                   InvalidOperationException or
+                   ArgumentException or
+                   NullReferenceException)
+        {
+            throw new RasHubApiException(
+                "RasHub returned incompatible response data.",
+                innerException: exception);
+        }
     }
 
     public async Task<T> SendAsync<T>(
@@ -42,9 +56,31 @@ public sealed class RasHubApiClient(
         CancellationToken cancellationToken)
     {
         var connection = connectionProvider.GetRequiredConnection();
+        return await SendAsync<T>(
+            method,
+            relativePath,
+            body,
+            connection,
+            cancellationToken);
+    }
+
+    internal async Task<T> SendAsync<T>(
+        HttpMethod method,
+        string relativePath,
+        object? body,
+        RasHubConnection connection,
+        CancellationToken cancellationToken)
+    {
         var requestUri = new Uri(connection.BaseAddress, relativePath);
         using var request = new HttpRequestMessage(method, requestUri);
         var requestPath = requestUri.AbsolutePath;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+
+        if (httpClient.Timeout != Timeout.InfiniteTimeSpan)
+            deadline.CancelAfter(httpClient.Timeout);
+
+        var requestToken = deadline.Token;
 
         logger.LogDebug(
             "Sending RasHub request {RequestMethod} {RequestPath}",
@@ -63,7 +99,7 @@ public sealed class RasHubApiClient(
             response = await httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                requestToken);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -73,7 +109,8 @@ public sealed class RasHubApiClient(
                 method.Method,
                 requestPath);
             throw new RasHubApiException(
-                "The RasHub request timed out.",
+                "The RasHub request timed out. Its outcome may be unknown; reload data " +
+                "before retrying.",
                 innerException: exception);
         }
         catch (HttpRequestException exception)
@@ -95,12 +132,18 @@ public sealed class RasHubApiClient(
 
             try
             {
+                if (response.Content.Headers.ContentLength is > MaxResponseContentBytes)
+                    throw ResponseTooLarge(response.StatusCode, traceId);
+
+                await response.Content.LoadIntoBufferAsync(
+                    MaxResponseContentBytes,
+                    requestToken);
                 await using var responseStream =
-                    await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await response.Content.ReadAsStreamAsync(requestToken);
                 envelope = await JsonSerializer.DeserializeAsync<ApiResponse<T>>(
                     responseStream,
                     JsonOptions,
-                    cancellationToken);
+                    requestToken);
             }
             catch (JsonException exception)
             {
@@ -114,6 +157,40 @@ public sealed class RasHubApiClient(
                     traceId);
                 throw new RasHubApiException(
                     "RasHub returned an invalid JSON response.",
+                    response.StatusCode,
+                    traceId: traceId,
+                    innerException: exception);
+            }
+            catch (OperationCanceledException exception)
+                when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    exception,
+                    "RasHub request {RequestMethod} {RequestPath} timed out while reading " +
+                    "the response body with HTTP {StatusCode} and trace {TraceId}",
+                    method.Method,
+                    requestPath,
+                    (int)response.StatusCode,
+                    traceId);
+                throw new RasHubApiException(
+                    "The RasHub request timed out. Its outcome may be unknown; reload data " +
+                    "before retrying.",
+                    response.StatusCode,
+                    traceId: traceId,
+                    innerException: exception);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or IOException)
+            {
+                logger.LogWarning(
+                    exception,
+                    "RasHub request {RequestMethod} {RequestPath} returned an unreadable or " +
+                    "oversized body with HTTP {StatusCode} and trace {TraceId}",
+                    method.Method,
+                    requestPath,
+                    (int)response.StatusCode,
+                    traceId);
+                throw new RasHubApiException(
+                    "The RasHub response could not be read or exceeded the supported size.",
                     response.StatusCode,
                     traceId: traceId,
                     innerException: exception);
@@ -202,6 +279,16 @@ public sealed class RasHubApiClient(
         return response.Headers.TryGetValues(TraceIdHeaderName, out var values)
             ? values.FirstOrDefault()
             : null;
+    }
+
+    private static RasHubApiException ResponseTooLarge(
+        HttpStatusCode statusCode,
+        string? traceId)
+    {
+        return new RasHubApiException(
+            "The RasHub response exceeded the supported size.",
+            statusCode,
+            traceId: traceId);
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

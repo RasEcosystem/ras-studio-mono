@@ -29,7 +29,7 @@ public sealed class ApplicationDiagnosticsTests
     }
 
     [Fact]
-    public void Emit_ReplacesCorrelatedEventAndAdjustsCounters()
+    public void Emit_ReplacesCorrelatedEventWithoutRewritingLifetimeCounters()
     {
         var diagnostics = new ApplicationDiagnostics(new FixedTimeProvider(Now));
 
@@ -46,7 +46,7 @@ public sealed class ApplicationDiagnosticsTests
         var diagnosticEvent = Assert.Single(diagnostics.GetEvents());
         Assert.Equal(originalId, diagnosticEvent.Id);
         Assert.Equal("Gate failed", diagnosticEvent.Message);
-        Assert.Equal(0, diagnostics.WarningCount);
+        Assert.Equal(1, diagnostics.WarningCount);
         Assert.Equal(1, diagnostics.ErrorCount);
     }
 
@@ -65,7 +65,7 @@ public sealed class ApplicationDiagnosticsTests
             item =>
                 item.Message == $"Warning {ApplicationDiagnostics.RetainedEventCapacity}");
         Assert.Equal(
-            ApplicationDiagnostics.RetainedEventCapacity,
+            ApplicationDiagnostics.RetainedEventCapacity + 1,
             diagnostics.WarningCount);
     }
 

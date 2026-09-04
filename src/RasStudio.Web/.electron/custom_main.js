@@ -37,11 +37,6 @@ exports.onStartup = function onStartup() {
         app.setAppUserModelId(applicationId);
     }
 
-    // ElectronNET's generated lock runs too late to prevent a duplicate backend.
-    if (!app.requestSingleInstanceLock()) {
-        process.exit(0);
-    }
-
     app.on("web-contents-created", (_event, contents) => {
         secureApplicationWindow(contents);
     });

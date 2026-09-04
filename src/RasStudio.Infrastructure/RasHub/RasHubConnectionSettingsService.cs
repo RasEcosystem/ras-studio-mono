@@ -28,20 +28,33 @@ public sealed class RasHubConnectionSettingsService(
 
         var baseAddress = NormalizeBaseAddress(settings.BaseUrl);
 
-        try
+        return new RasHubConnection(
+            baseAddress,
+            UnprotectApiKey(settings.ProtectedApiKey));
+    }
+
+    internal RasHubConnection CreateCandidateConnection(SaveRasHubConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var baseAddress = NormalizeBaseAddress(connection.BaseUrl);
+
+        if (connection.ApiKey is not null)
         {
-            var apiKey = _protector.Unprotect(settings.ProtectedApiKey);
-            return new RasHubConnection(baseAddress, apiKey);
+            ValidateApiKey(connection.ApiKey);
+            return new RasHubConnection(baseAddress, connection.ApiKey);
         }
-        catch (CryptographicException exception)
-        {
-            logger.LogWarning(
-                exception,
-                "Unable to unprotect the saved RasHub user API key");
-            throw new RasHubApiException(
-                "The saved RasHub API key cannot be decrypted. Save the connection again.",
-                innerException: exception);
-        }
+
+        var current = settingsProvider.Settings;
+
+        if (string.IsNullOrWhiteSpace(current.ProtectedApiKey) ||
+            !HasSameBaseAddress(current.BaseUrl, baseAddress))
+            throw new RasHubConnectionValidationException(
+                "A RasHub API key is required to test this connection.");
+
+        return new RasHubConnection(
+            baseAddress,
+            UnprotectApiKey(current.ProtectedApiKey));
     }
 
     public RasHubConnectionState Current
@@ -146,5 +159,22 @@ public sealed class RasHubConnectionSettingsService(
         if (value.Length > ApiKeyMaxLength)
             throw new RasHubConnectionValidationException(
                 $"RasHub API key cannot exceed {ApiKeyMaxLength} characters.");
+    }
+
+    private string UnprotectApiKey(string protectedApiKey)
+    {
+        try
+        {
+            return _protector.Unprotect(protectedApiKey);
+        }
+        catch (CryptographicException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Unable to unprotect the saved RasHub user API key");
+            throw new RasHubApiException(
+                "The saved RasHub API key cannot be decrypted. Save the connection again.",
+                innerException: exception);
+        }
     }
 }

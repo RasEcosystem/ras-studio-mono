@@ -21,6 +21,7 @@ public static class DependencyInjection
             provider.GetRequiredService<RasHubConnectionSettingsService>());
         services.AddScoped<IRasHubConnectionSettings>(provider =>
             provider.GetRequiredService<RasHubConnectionSettingsService>());
+        services.AddScoped<IRasHubConnectionTester, RasHubConnectionTester>();
 
         services.AddScoped<IRasGateService, RasHubRasGateClient>();
         services.AddScoped<IRasEndpointService, RasHubRasEndpointClient>();
@@ -30,8 +31,9 @@ public static class DependencyInjection
         services
             .AddHttpClient<RasHubApiClient>(client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(60);
+                client.Timeout = TimeSpan.FromSeconds(90);
             })
+            .RemoveAllLoggers()
             .RedactLoggedHeaders(headerName =>
                 string.Equals(headerName, "X-Api-Key", StringComparison.OrdinalIgnoreCase))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
