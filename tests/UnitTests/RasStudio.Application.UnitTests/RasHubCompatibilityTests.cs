@@ -18,6 +18,8 @@ public sealed class RasHubCompatibilityTests
     [InlineData("")]
     [InlineData("unknown")]
     [InlineData("0.1.0")]
+    [InlineData("0.1.1-alpha.1")]
+    [InlineData("0.1.1-rc.1+abcdef")]
     [InlineData("0.0.9+abcdef")]
     public void IsSupported_RejectsInvalidAndOlderVersions(string version)
     {

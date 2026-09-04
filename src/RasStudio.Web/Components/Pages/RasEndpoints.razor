@@ -43,7 +43,7 @@
         else
         {
             <MudStack Spacing="3">
-                @if (_gateOptions.Count == 0 && !_loading)
+                @if (_gateOptions.Count == 0 && !_loading && _loadError is null)
                 {
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
                         Register a RasGate before adding a RAS endpoint.
@@ -242,6 +242,8 @@
 </AppPageShell>
 
 @code {
+    private const int GatePageSize = 100;
+
     private static readonly DialogOptions EditorDialogOptions = new()
     {
         MaxWidth = MaxWidth.Small,
@@ -280,8 +282,7 @@
         {
             _loading = true;
             _loadError = null;
-            _gateOptions = await RasGateService.GetAllAsync(
-                cancellationToken: _disposeToken.Token);
+            _gateOptions = await LoadAllGatesAsync();
             var page = await RasEndpointService.GetPageAsync(
                 _pageNumber,
                 _pageSize,
@@ -309,6 +310,23 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task<IReadOnlyList<RasGate>> LoadAllGatesAsync()
+    {
+        var gates = new List<RasGate>();
+
+        for (var pageNumber = 1;; pageNumber++)
+        {
+            var page = await RasGateService.GetPageAsync(
+                pageNumber,
+                GatePageSize,
+                cancellationToken: _disposeToken.Token);
+            gates.AddRange(page.Items);
+
+            if (pageNumber >= page.TotalPages || page.Items.Count == 0)
+                return gates.DistinctBy(gate => gate.Id).ToArray();
         }
     }
 
@@ -543,4 +561,5 @@
         _disposeToken.Cancel();
         _disposeToken.Dispose();
     }
+
 }

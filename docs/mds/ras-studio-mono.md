@@ -112,8 +112,6 @@ windows have closed.
 
 `src/RasStudio.Web/.electron/custom_main.js` additionally:
 
-- acquires a single-instance lock before the normal generated Electron lock
-  logic;
 - rejects all Chromium permission requests;
 - prohibits `window.open`;
 - blocks navigation unless the URL is HTTP loopback (`127.0.0.1`, `localhost`,
@@ -171,7 +169,6 @@ Configuration keys in use:
 |---|---|
 | `Desktop:DisableElectron` | Web-only diagnostic mode |
 | `Desktop:DiagnosticPort` | Loopback port for diagnostic mode |
-| `Desktop:ElectronArguments` | Additional Electron arguments; currently used only by smoke tests |
 | `Desktop:SmokeTest` | Automatic window closure |
 | `RasStudio:ThemeOverride` | Forced theme for visual capture |
 | `RasStudio:AppDataPath` | Configuration-based local-data override |
@@ -223,11 +220,17 @@ Direct versions:
 - target framework `net10.0`;
 - `ElectronNET.Core` and `.AspNet` `0.5.2`;
 - generated Electron `43.4.0`;
+- generated `electron-builder` `26.15.3`;
 - `MudBlazor` `9.9.0`;
 - `Nava.Settings` `0.2.0`;
-- version source `version.json`: `0.1.0-beta.1` + Nerdbank.GitVersioning;
-  the header derives both the `BETA` prerelease badge and display version from
-  generated assembly metadata.
+- version source `version.json`: `0.1.0` + Nerdbank.GitVersioning; the header
+  derives the prerelease badge and display version from generated assembly
+  metadata.
+
+The generated package redirects ElectronNET's `image-size` dependency to the
+local `ImageSizeShim`. It reads splash dimensions through Electron
+`nativeImage`, avoiding vulnerable third-party binary image parsers in the
+shipped runtime.
 
 The Linux profile creates a self-contained x64 AppImage. The Windows profile
 creates a self-contained x64 NSIS installer and portable executable.
@@ -261,6 +264,12 @@ tests/SmokeTests/Visual
 5. `tests/SmokeTests/Desktop/run-smoke.sh`;
 6. `tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh`.
 
+`make release` adds Electron and packaged dependency audits, creates the Linux
+AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
+desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
+developer's already-running production instance cannot make CI nondeterministic;
+the production manifest is still asserted to keep `singleInstance=true`.
+
 The visual smoke test captures 20 images: Home in four themes at desktop/mobile
 sizes and all primary routes, including Application events, in Carbon. It checks for security headers and a
 difference between Light and System-dark, but it does not compare against
@@ -269,9 +278,8 @@ approved baselines. It is therefore a smoke test, not a pixel-regression suite.
 The desktop smoke test checks the generated Electron config, security hook,
 PackageId, loopback console output, Socket.IO connection, creation of the
 settings database, rolling log creation, logged start/stop lifecycle, and
-coordinated Electron/backend shutdown. Some security assertions
-are static and do not prove the absence of a second listener or complete
-two-instance behavior.
+coordinated Electron/backend shutdown. The packaged Linux smoke repeats the
+critical lifecycle assertions against the built AppImage.
 
 The ignored `artifacts/` directory contains outputs from several historical
 architectures, including old dashboard/login screenshots. Do not use it as a

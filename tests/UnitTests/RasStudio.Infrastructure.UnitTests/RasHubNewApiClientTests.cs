@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging.Abstractions;
-using RasStudio.Application.Clusters;
 using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasHub;
 using RasStudio.Infrastructure.RasHub;
@@ -20,13 +19,7 @@ public sealed class RasHubNewApiClientTests
     public async Task RasEndpointQueries_UseNewRoutesAndMapConfigurationRevision()
     {
         var handler = new RecordingHandler(
-            Success(new
-            {
-                items = new[] { EndpointModel() },
-                totalCount = 11,
-                page = 2,
-                pageSize = 10
-            }),
+            Success(new { items = new[] { EndpointModel() }, totalCount = 11, page = 2, pageSize = 10 }),
             Success(new[] { EndpointModel() }),
             Success(EndpointModel()));
         var client = new RasHubRasEndpointClient(CreateApiClient(handler));
@@ -116,13 +109,7 @@ public sealed class RasHubNewApiClientTests
     public async Task ClusterClient_UsesEndpointScopedShadowRoutes()
     {
         var handler = new RecordingHandler(
-            Success(new
-            {
-                items = new[] { ClusterModel() },
-                totalCount = 1,
-                page = 1,
-                pageSize = 25
-            }),
+            Success(new { items = new[] { ClusterModel() }, totalCount = 1, page = 1, pageSize = 25 }),
             Success(new { totalCount = 1, observedAt = "2026-09-04T13:00:00Z" }));
         var client = new RasHubClusterClient(CreateApiClient(handler));
         var endpointId = Guid.Parse("a42195a1-b54d-4593-b56b-b4fe2d1da355");
@@ -169,10 +156,71 @@ public sealed class RasHubNewApiClientTests
         Assert.Equal("/root/api/v1/info", handler.Request!.PathAndQuery);
     }
 
-    private static RasHubApiClient CreateApiClient(RecordingHandler handler)
+    [Fact]
+    public async Task ApiClient_timeout_covers_response_body()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new NeverEndingContent() };
+        var client = CreateApiClient(
+            new RecordingHandler(response),
+            TimeSpan.FromMilliseconds(50));
+
+        var exception = await Assert.ThrowsAsync<RasHubApiException>(() =>
+            client.SendAsync<object>(
+                HttpMethod.Get,
+                "api/v1/test",
+                null,
+                CancellationToken.None));
+
+        Assert.Contains("timed out", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("outcome may be unknown", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ApiClient_rejects_declared_oversized_response_before_reading_body()
+    {
+        var response = Success(new { value = true });
+        response.Content.Headers.ContentLength = 16 * 1024 * 1024 + 1;
+        response.Headers.Add("X-Trace-Id", "trace-large");
+        var client = CreateApiClient(new RecordingHandler(response));
+
+        var exception = await Assert.ThrowsAsync<RasHubApiException>(() =>
+            client.SendAsync<object>(
+                HttpMethod.Get,
+                "api/v1/test",
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("exceeded", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("trace-large", exception.TraceId);
+    }
+
+    [Fact]
+    public async Task Mapping_invalid_success_payload_returns_protocol_exception()
+    {
+        var handler = new RecordingHandler(Success(new
+        {
+            items = (object?)null,
+            totalCount = 1,
+            page = 1,
+            pageSize = 10
+        }));
+        var client = new RasHubRasEndpointClient(CreateApiClient(handler));
+
+        var exception = await Assert.ThrowsAsync<RasHubApiException>(() =>
+            client.GetPageAsync(
+                1,
+                10,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("incompatible", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static RasHubApiClient CreateApiClient(
+        RecordingHandler handler,
+        TimeSpan? timeout = null)
     {
         return new RasHubApiClient(
-            new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) },
+            new HttpClient(handler) { Timeout = timeout ?? TimeSpan.FromSeconds(5) },
             new StaticConnectionProvider(),
             NullLogger<RasHubApiClient>.Instance);
     }
@@ -286,4 +334,28 @@ public sealed class RasHubNewApiClientTests
         string PathAndQuery,
         string? ApiKey,
         string? Body);
+
+    private sealed class NeverEndingContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context)
+        {
+            return Task.Delay(Timeout.InfiniteTimeSpan);
+        }
+
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context,
+            CancellationToken cancellationToken)
+        {
+            return Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
 }

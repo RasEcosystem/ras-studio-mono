@@ -5,6 +5,7 @@
 @inject IRasHubConnectionSettings ConnectionSettings
 @inject ISnackbar Snackbar
 @inject ILogger<Clusters> Logger
+@inject NavigationManager Navigation
 
 <AppPageTitle Title="Clusters"/>
 
@@ -34,6 +35,23 @@
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Outlined.Settings">
                             Open settings
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else if (!_loadingEndpoints && _loadError is not null && _endpoints.Count == 0)
+        {
+            <MudPaper Class="app-card" Elevation="1">
+                <AppEmptyState Title="Unable to load RAS endpoints"
+                               Description="@_loadError"
+                               Icon="@Icons.Material.Outlined.CloudOff">
+                    <Actions>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Refresh"
+                                   OnClick="ReloadEndpointsAsync">
+                            Retry
                         </MudButton>
                     </Actions>
                 </AppEmptyState>
@@ -198,6 +216,8 @@
 </AppPageShell>
 
 @code {
+    private const int EndpointPageSize = 100;
+
     private readonly CancellationTokenSource _disposeToken = new();
     private IReadOnlyList<RasEndpoint> _endpoints = [];
     private RasClusterPage _page = new([], 0, 1, 10, 0);
@@ -208,6 +228,8 @@
     private bool _loadingEndpoints;
     private bool _loading;
     private bool _refreshing;
+    private bool _initialized;
+    private Guid? _appliedRequestedEndpointId;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "rasEndpointId")]
@@ -215,12 +237,36 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!ConnectionSettings.Current.IsConfigured)
+        if (ConnectionSettings.Current.IsConfigured)
+        {
+            await LoadEndpointsAsync();
+            if (_selectedEndpointId is not null)
+                await LoadPageAsync();
+        }
+
+        _appliedRequestedEndpointId = RequestedEndpointId;
+        _initialized = true;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized ||
+            _loadingEndpoints ||
+            RequestedEndpointId == _appliedRequestedEndpointId)
             return;
 
-        await LoadEndpointsAsync();
-        if (_selectedEndpointId is not null)
-            await LoadPageAsync();
+        _appliedRequestedEndpointId = RequestedEndpointId;
+        var endpointId = _endpoints.Any(endpoint => endpoint.Id == RequestedEndpointId)
+            ? RequestedEndpointId
+            : _endpoints.FirstOrDefault()?.Id;
+
+        if (endpointId == _selectedEndpointId)
+            return;
+
+        _selectedEndpointId = endpointId;
+        _pageNumber = 1;
+        _page = new RasClusterPage([], 0, 1, _pageSize, 0);
+        await LoadPageAsync();
     }
 
     private async Task LoadEndpointsAsync()
@@ -229,7 +275,7 @@
         {
             _loadingEndpoints = true;
             _loadError = null;
-            _endpoints = (await RasEndpointService.GetAllAsync(_disposeToken.Token))
+            _endpoints = (await LoadAllEndpointsAsync())
                 .Where(endpoint => endpoint.IsActive)
                 .ToArray();
             _selectedEndpointId = _endpoints.Any(endpoint => endpoint.Id == RequestedEndpointId)
@@ -248,6 +294,30 @@
         {
             _loadingEndpoints = false;
         }
+    }
+
+    private async Task<IReadOnlyList<RasEndpoint>> LoadAllEndpointsAsync()
+    {
+        var endpoints = new List<RasEndpoint>();
+
+        for (var pageNumber = 1;; pageNumber++)
+        {
+            var page = await RasEndpointService.GetPageAsync(
+                pageNumber,
+                EndpointPageSize,
+                _disposeToken.Token);
+            endpoints.AddRange(page.Items);
+
+            if (pageNumber >= page.TotalPages || page.Items.Count == 0)
+                return endpoints.DistinctBy(endpoint => endpoint.Id).ToArray();
+        }
+    }
+
+    private async Task ReloadEndpointsAsync()
+    {
+        await LoadEndpointsAsync();
+        if (_selectedEndpointId is not null && _loadError is null)
+            await LoadPageAsync();
     }
 
     private async Task LoadPageAsync()
@@ -333,8 +403,15 @@
     private async Task EndpointChangedAsync(Guid? endpointId)
     {
         _selectedEndpointId = endpointId;
+        _appliedRequestedEndpointId = endpointId;
         _pageNumber = 1;
         _page = new RasClusterPage([], 0, 1, _pageSize, 0);
+
+        Navigation.NavigateTo(
+            endpointId is { } id
+                ? $"/clusters?rasEndpointId={id:D}"
+                : "/clusters",
+            replace: true);
         await LoadPageAsync();
     }
 
@@ -387,4 +464,5 @@
         _disposeToken.Cancel();
         _disposeToken.Dispose();
     }
+
 }

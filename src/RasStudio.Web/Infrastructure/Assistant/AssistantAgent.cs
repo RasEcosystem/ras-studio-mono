@@ -8,7 +8,7 @@ public sealed class AssistantAgent(
     RasStudioMcpClient mcpClient)
 {
     private const string SystemPrompt = """
-                                        You are the RasStudio assistant. Use the available tools whenever the user asks about the application or RAS infrastructure. Do not invent runtime data that a tool can provide. Respond in the user's language and use Markdown when it improves readability.
+                                        You are the RasStudio assistant. The available tools currently expose RasStudio application metadata only. Use them for questions about the application's identity, version, or description. Do not claim access to live RAS infrastructure data. Respond in the user's language and use Markdown when it improves readability.
                                         """;
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

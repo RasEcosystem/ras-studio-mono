@@ -1,4 +1,3 @@
-using ElectronNET;
 using ElectronNET.API;
 using ElectronNET.API.Entities;
 using Microsoft.AspNetCore.DataProtection;
@@ -97,8 +96,6 @@ try
     else
     {
         builder.Services.AddElectron();
-        ElectronNetRuntime.ElectronExtraArguments =
-            builder.Configuration["Desktop:ElectronArguments"] ?? string.Empty;
         builder.UseElectron(
             args,
             services => CreateDesktopWindowAsync(

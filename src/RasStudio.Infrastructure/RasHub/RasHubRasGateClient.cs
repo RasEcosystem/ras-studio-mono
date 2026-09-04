@@ -221,5 +221,4 @@ public sealed class RasHubRasGateClient(
         if (id == Guid.Empty)
             throw new ArgumentException("RasGate ID must not be empty.", nameof(id));
     }
-
 }

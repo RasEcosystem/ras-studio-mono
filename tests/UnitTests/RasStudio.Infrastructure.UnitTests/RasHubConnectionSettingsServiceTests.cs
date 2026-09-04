@@ -1,6 +1,10 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nava.Settings.Abstractions;
 using Nava.Settings.DependencyInjection;
 using Nava.Settings.Extensions;
@@ -56,6 +60,40 @@ public sealed class RasHubConnectionSettingsServiceTests
                 "0123456789abcdef0123456789abcdef",
                 settings.GetRequiredConnection().ApiKey);
 
+            var retainedKeyCandidate = settings.CreateCandidateConnection(
+                new SaveRasHubConnection("http://hub.example/rashub/", null));
+            Assert.Equal(
+                "0123456789abcdef0123456789abcdef",
+                retainedKeyCandidate.ApiKey);
+
+            var connectionTestHandler = new ConnectionTestHandler(
+                Success(new { version = "0.1.1" }),
+                Success(new { items = Array.Empty<object>(), totalCount = 7, page = 1, pageSize = 1 }));
+            var connectionTester = new RasHubConnectionTester(
+                settings,
+                new RasHubApiClient(
+                    new HttpClient(connectionTestHandler),
+                    settings,
+                    NullLogger<RasHubApiClient>.Instance));
+
+            var testResult = await connectionTester.TestAsync(
+                new SaveRasHubConnection(
+                    "https://draft-hub.example/proxy",
+                    "abcdef0123456789abcdef0123456789"),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(new RasHubConnectionTestResult("0.1.1", 7), testResult);
+            Assert.All(
+                connectionTestHandler.Requests,
+                request =>
+                {
+                    Assert.StartsWith("https://draft-hub.example/proxy/", request.Uri);
+                    Assert.Equal("abcdef0123456789abcdef0123456789", request.ApiKey);
+                });
+            Assert.Equal(
+                "http://hub.example/rashub/",
+                settings.Current.BaseUrl);
+
             await settings.SaveAsync(new SaveRasHubConnection(
                     "http://hub.example/rashub/",
                     null),
@@ -104,6 +142,36 @@ public sealed class RasHubConnectionSettingsServiceTests
         finally
         {
             Directory.Delete(testDirectory, true);
+        }
+    }
+
+    private static HttpResponseMessage Success(object data)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new { success = true, data }),
+                Encoding.UTF8,
+                "application/json")
+        };
+    }
+
+    private sealed class ConnectionTestHandler(params HttpResponseMessage[] responses)
+        : HttpMessageHandler
+    {
+        private readonly Queue<HttpResponseMessage> _responses = new(responses);
+
+        public List<(string Uri, string? ApiKey)> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var apiKey = request.Headers.TryGetValues("X-Api-Key", out var values)
+                ? values.Single()
+                : null;
+            Requests.Add((request.RequestUri!.AbsoluteUri, apiKey));
+            return Task.FromResult(_responses.Dequeue());
         }
     }
 }

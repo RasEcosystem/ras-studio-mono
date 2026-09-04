@@ -158,6 +158,37 @@ public sealed class RasGateHostTests(
         Assert.Equal(endpoint.Id, clusterService.RequestedEndpointId);
     }
 
+    [Fact]
+    public async Task ClustersPage_when_endpoint_load_fails_displays_error_and_retry()
+    {
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IRasEndpointService>();
+                services.RemoveAll<IRasClusterService>();
+                services.RemoveAll<IRasHubConnectionSettings>();
+                services.AddSingleton<IRasEndpointService>(
+                    new StubRasEndpointService(
+                        0,
+                        pageException: new RasHubApiException("RasHub is unavailable.")));
+                services.AddSingleton<IRasClusterService>(new StubRasClusterService());
+                services.AddSingleton<IRasHubConnectionSettings>(
+                    new StubRasHubConnectionSettings());
+            }));
+        using var httpClient = configuredFactory.CreateClient();
+        using var response = await httpClient.GetAsync(
+            "/clusters",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("Unable to load RAS endpoints", html, StringComparison.Ordinal);
+        Assert.Contains("RasHub is unavailable.", html, StringComparison.Ordinal);
+        Assert.Contains("Retry", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("No active RAS endpoints", html, StringComparison.Ordinal);
+    }
+
     private static RasGate CreateGate(Guid gateId)
     {
         return new RasGate(
@@ -206,7 +237,8 @@ public sealed class RasGateHostTests(
 
     private sealed class StubRasEndpointService(
         int totalCount,
-        IReadOnlyList<RasEndpoint>? endpoints = null) : IRasEndpointService
+        IReadOnlyList<RasEndpoint>? endpoints = null,
+        Exception? pageException = null) : IRasEndpointService
     {
         public (int Page, int PageSize)? RequestedPage { get; private set; }
 
@@ -216,6 +248,9 @@ public sealed class RasGateHostTests(
             CancellationToken cancellationToken = default)
         {
             RequestedPage = (page, pageSize);
+            if (pageException is not null)
+                return Task.FromException<RasEndpointPage>(pageException);
+
             return Task.FromResult(new RasEndpointPage(
                 endpoints ?? [],
                 totalCount,
@@ -308,7 +343,12 @@ public sealed class RasGateHostTests(
             CancellationToken cancellationToken = default)
         {
             RequestedPage = (page, pageSize);
-            return Task.FromResult(new RasGatePage([], totalCount, page, pageSize, 1));
+            return Task.FromResult(new RasGatePage(
+                gates ?? [],
+                totalCount,
+                page,
+                pageSize,
+                1));
         }
 
         public Task<IReadOnlyList<RasGate>> GetAllAsync(

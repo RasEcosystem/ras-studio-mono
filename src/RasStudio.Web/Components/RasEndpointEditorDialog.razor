@@ -1,5 +1,4 @@
 @using System.Net
-
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form" ValidationDelay="0">
@@ -97,7 +96,7 @@
 
     [Parameter] public RasEndpoint? Endpoint { get; set; }
 
-    [Parameter][EditorRequired] public IReadOnlyList<RasGate> GateOptions { get; set; } = [];
+    [Parameter] [EditorRequired] public IReadOnlyList<RasGate> GateOptions { get; set; } = [];
 
     protected override void OnInitialized()
     {
@@ -175,4 +174,5 @@
             .ToString()
             .TrimEnd('/');
     }
+
 }

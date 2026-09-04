@@ -163,18 +163,18 @@ Executed on 2026-08-27 with the current contracts checkout `a15d1fd`:
   environment restriction, not a compile/test failure; the three substantive
   stages were run directly.
 
-The generated npm tree contains one vulnerable package, `image-size 1.2.1`,
-affected by two high-severity advisories; no patched version was available in
-the current audit:
+The initial generated npm tree contained vulnerable `image-size 1.2.1`,
+affected by two high-severity advisories:
 
 - direct generated `image-size <= 2.0.2`;
 - [GHSA-w3rx-r6r6-pgpr](https://github.com/advisories/GHSA-w3rx-r6r6-pgpr);
 - [GHSA-5p2g-fcmc-qvqq](https://github.com/advisories/GHSA-5p2g-fcmc-qvqq).
 
-This is a dependency of Electron packaging/runtime generation, not a file
-explicitly declared in a source `.csproj`. Do not mechanically edit the
-generated `bin` package before updating; first check a newer ElectronNET version
-or its template/dependency path.
+The source-controlled Electron package template now redirects that dependency
+to `ImageSizeShim`, which delegates dimension reads to Electron `nativeImage`.
+Together with `electron-builder 26.15.3`, current generated, publish, and
+packaging dependency audits report zero known vulnerabilities. Run
+`make electron-audit` and `make package-audit` to recheck them.
 
 ## Artifacts
 

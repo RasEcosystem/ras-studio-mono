@@ -20,8 +20,9 @@ managing 1C:Enterprise RAS infrastructure.
 
 The built-in assistant provides streaming responses through an Ollama- or
 OpenAI-compatible endpoint. It can use the protected embedded MCP server to
-inspect RasStudio and RAS infrastructure through explicitly allowed read-only
-tools; provider and model settings are stored locally.
+read RasStudio application metadata through the `get_rasstudio_info` tool.
+Live RAS infrastructure tools are not implemented yet; provider and model
+settings are stored locally.
 
 ![RasStudio Mono Assistant page](docs/img/ras-studio-assistant.png)
 
@@ -93,6 +94,13 @@ make package-linux
 make package-windows
 ```
 
+For the complete Linux release gate (tests, package, dependency audit, and a
+packaged application lifecycle check), run:
+
+``` bash
+make release
+```
+
 Linux produces an x64 AppImage. Windows produces an x64 NSIS installer and a
 portable executable. Electron packages are platform-specific: build Windows
 packages on Windows and Linux packages on Linux (or through WSL where supported
@@ -111,6 +119,9 @@ authenticated embedded MCP endpoint, captures all themes in desktop/mobile
 viewports, and runs a real headless Electron lifecycle check. The lifecycle
 check verifies that Kestrel binds only to `127.0.0.1` and exits when the desktop
 window closes.
+
+`make electron-audit` checks the generated Electron dependency tree, while
+`make package-audit` checks both Node trees copied into the desktop package.
 
 ## Related projects
 

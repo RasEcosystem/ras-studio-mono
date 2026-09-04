@@ -11,8 +11,17 @@ public static class RasHubCompatibility
         if (string.IsNullOrWhiteSpace(version))
             return false;
 
-        var coreVersion = version.Split(['-', '+'], 2)[0];
-        return Version.TryParse(coreVersion, out var parsed) &&
-               parsed >= MinimumVersion;
+        var withoutBuildMetadata = version.Split('+', 2)[0];
+        var separatorIndex = withoutBuildMetadata.IndexOf('-');
+        var coreVersion = separatorIndex >= 0
+            ? withoutBuildMetadata[..separatorIndex]
+            : withoutBuildMetadata;
+
+        if (!Version.TryParse(coreVersion, out var parsed))
+            return false;
+
+        return separatorIndex < 0
+            ? parsed >= MinimumVersion
+            : parsed > MinimumVersion;
     }
 }

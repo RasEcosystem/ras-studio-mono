@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+BUILD_CONFIGURATION="${CONFIGURATION:-Debug}"
 OUTPUT_DIRECTORY="${1:-$REPOSITORY_ROOT/artifacts/visual}"
 RUN_DIRECTORY="$(mktemp -d -t ras-studio-visual-XXXXXX)"
 APP_PID=""
@@ -43,7 +44,11 @@ fi
 
 mkdir -p "$OUTPUT_DIRECTORY"
 
-dotnet build "$REPOSITORY_ROOT/RasStudio.sln" --no-restore -m:1
+dotnet build \
+    "$REPOSITORY_ROOT/RasStudio.sln" \
+    --configuration "$BUILD_CONFIGURATION" \
+    --no-restore \
+    -m:1
 
 themes=(Carbon Slate Light System)
 port=5181
@@ -66,6 +71,7 @@ for theme in "${themes[@]}"; do
         Desktop__DiagnosticPort="$port" \
         RasStudio__ThemeOverride="$theme" \
         dotnet run \
+            --configuration "$BUILD_CONFIGURATION" \
             --no-build \
             --no-launch-profile \
             --project "$REPOSITORY_ROOT/src/RasStudio.Web/RasStudio.Web.csproj" \

@@ -9,8 +9,8 @@ WEB_PROJECT := src/RasStudio.Web/RasStudio.Web.csproj
 .DEFAULT_GOAL := help
 
 .PHONY: help all submodules submodules-update restore build debug build-release run \
-	package release package-linux package-windows format format-check dotnet-tests visual desktop-smoke \
-	mcp-smoke test clean
+	package release package-linux package-windows package-audit packaged-linux-smoke format format-check \
+	dotnet-tests visual desktop-smoke mcp-smoke electron-audit test clean
 
 help:
 	@printf '%s\n' \
@@ -24,13 +24,16 @@ help:
 		'  make package           Build a package for the current Windows/Linux host' \
 		'  make package-linux     Build the Linux x64 AppImage (run on Linux)' \
 		'  make package-windows   Build Windows x64 installer and portable app (run on Windows)' \
+		'  make package-audit     Audit dependencies used by the package build and runtime' \
+		'  make packaged-linux-smoke  Verify the packaged AppImage lifecycle' \
+		'  make release           Run all checks, package for this host, and audit the package' \
 		'  make format            Format the solution' \
 		'  make format-check      Verify formatting exactly as CI should' \
 		'  make dotnet-tests      Run unit and integration test projects' \
 		'  make visual            Capture Home page screenshots for every theme' \
 		'  make desktop-smoke     Verify Electron/Kestrel startup and shutdown lifecycle' \
 		'  make mcp-smoke         Verify protected MCP discovery and tool invocation' \
-		'  make test              Run build, .NET, visual, desktop, and MCP checks' \
+		'  make test              Run build, dependency, .NET, visual, desktop, and MCP checks' \
 		'  make clean             Clean build and package outputs'
 
 all: build
@@ -58,12 +61,18 @@ build-release:
 run: build
 	$(DOTNET) run --no-build --no-launch-profile --project "$(WEB_PROJECT)" -- -unpackeddotnet
 
-package release:
+package:
 	@case "$$(uname -s)" in \
 		Linux) $(MAKE) package-linux ;; \
 		MINGW*|MSYS*|CYGWIN*) $(MAKE) package-windows ;; \
 		*) printf '%s\n' 'Packaging is configured for Windows and Linux hosts.' >&2; exit 1 ;; \
 	esac
+
+release:
+	$(MAKE) test
+	$(MAKE) package
+	$(MAKE) package-audit
+	@if [ "$$(uname -s)" = 'Linux' ]; then $(MAKE) packaged-linux-smoke; fi
 
 package-linux:
 	$(DOTNET) restore "$(WEB_PROJECT)" --runtime linux-x64
@@ -72,6 +81,18 @@ package-linux:
 package-windows:
 	$(DOTNET) restore "$(WEB_PROJECT)" --runtime win-x64
 	$(DOTNET) publish "$(WEB_PROJECT)" --no-restore -p:PublishProfile=win-x64
+
+package-audit:
+	@case "$$(uname -s)" in \
+		Linux) publish_dir='src/RasStudio.Web/bin/Release/net10.0/linux-x64/publish' ;; \
+		MINGW*|MSYS*|CYGWIN*) publish_dir='src/RasStudio.Web/bin/Release/net10.0/win-x64/publish' ;; \
+		*) printf '%s\n' 'Package auditing is configured for Windows and Linux hosts.' >&2; exit 1 ;; \
+	esac; \
+	npm --prefix "$$publish_dir/app" audit --omit=dev --audit-level=high; \
+	npm --prefix "$$publish_dir" audit --omit=dev --audit-level=high
+
+packaged-linux-smoke:
+	tests/SmokeTests/Desktop/run-packaged-linux-smoke.sh
 
 format: restore
 	$(DOTNET) format "$(SOLUTION)" --no-restore
@@ -83,15 +104,19 @@ dotnet-tests: restore
 	$(DOTNET) test "$(SOLUTION)" --configuration "$(CONFIGURATION)" --no-restore -m:1
 
 visual:
-	tests/SmokeTests/Visual/run-screenshots.sh
+	CONFIGURATION="$(CONFIGURATION)" tests/SmokeTests/Visual/run-screenshots.sh
 
 desktop-smoke:
-	tests/SmokeTests/Desktop/run-smoke.sh
+	CONFIGURATION="$(CONFIGURATION)" tests/SmokeTests/Desktop/run-smoke.sh
 
 mcp-smoke:
-	tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh
+	CONFIGURATION="$(CONFIGURATION)" tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh
 
-test: build-release format-check dotnet-tests visual desktop-smoke mcp-smoke
+electron-audit: build-release
+	npm --prefix "src/RasStudio.Web/bin/Release/net10.0/.electron" audit --omit=dev --audit-level=high
+
+test: CONFIGURATION := Release
+test: build-release format-check electron-audit dotnet-tests visual desktop-smoke mcp-smoke
 
 clean:
 	$(DOTNET) clean "$(SOLUTION)"

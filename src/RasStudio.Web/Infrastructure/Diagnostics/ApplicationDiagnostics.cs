@@ -50,10 +50,15 @@ public sealed class ApplicationDiagnostics(TimeProvider timeProvider) : ILogEven
         switch (logEvent.Level)
         {
             case LogEventLevel.Warning:
+                Interlocked.Increment(ref _warningCount);
+                var warningChange = StoreEvent(logEvent);
+                ApplyHourlyCounterChange(warningChange.Previous, warningChange.Current);
+                break;
             case LogEventLevel.Error:
             case LogEventLevel.Fatal:
-                var change = StoreEvent(logEvent);
-                ApplyCounterChange(change.Previous, change.Current);
+                Interlocked.Increment(ref _errorCount);
+                var errorChange = StoreEvent(logEvent);
+                ApplyHourlyCounterChange(errorChange.Previous, errorChange.Current);
                 break;
         }
     }
@@ -120,25 +125,10 @@ public sealed class ApplicationDiagnostics(TimeProvider timeProvider) : ILogEven
         return result;
     }
 
-    private void ApplyCounterChange(
+    private void ApplyHourlyCounterChange(
         ApplicationDiagnosticEvent? previous,
         ApplicationDiagnosticEvent current)
     {
-        var warningDelta = IsWarning(current.Level) ? 1 : 0;
-        var errorDelta = IsError(current.Level) ? 1 : 0;
-
-        if (previous is not null)
-        {
-            warningDelta -= IsWarning(previous.Level) ? 1 : 0;
-            errorDelta -= IsError(previous.Level) ? 1 : 0;
-        }
-
-        if (warningDelta != 0)
-            Interlocked.Add(ref _warningCount, warningDelta);
-
-        if (errorDelta != 0)
-            Interlocked.Add(ref _errorCount, errorDelta);
-
         var currentHour = GetHourStart(timeProvider.GetUtcNow());
 
         lock (_hourCountersLock)

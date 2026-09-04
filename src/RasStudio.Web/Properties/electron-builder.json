@@ -7,6 +7,7 @@
             "AppImage"
         ],
         "category": "Utility",
+        "syncDesktopName": true,
         "icon": "bin/Assets/rasstudio.png",
         "desktop": {
             "entry": {

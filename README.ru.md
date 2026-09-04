@@ -21,8 +21,9 @@ RasStudio Mono — экспериментальное кроссплатформ
 
 Встроенный ассистент получает потоковые ответы через Ollama- или
 OpenAI-совместимый endpoint. Он может обращаться к защищённому встроенному
-MCP-серверу и получать данные RasStudio и RAS только через явно разрешённые
-read-only tools; настройки провайдера и модели хранятся локально.
+MCP-серверу и читать метаданные приложения RasStudio через инструмент
+`get_rasstudio_info`. Инструменты для данных работающей RAS-инфраструктуры пока
+не реализованы; настройки провайдера и модели хранятся локально.
 
 ![Страница Assistant приложения RasStudio Mono](docs/img/ras-studio-assistant.png)
 
@@ -94,6 +95,13 @@ make package-linux
 make package-windows
 ```
 
+Полная проверка Linux-релиза — тесты, сборка пакета, аудит зависимостей и
+lifecycle-проверка упакованного приложения — запускается так:
+
+``` bash
+make release
+```
+
 Для Linux создаётся x64 AppImage. Для Windows — x64 NSIS installer и portable
 executable. Electron-пакеты платформозависимы: Windows-пакеты следует собирать
 на Windows, Linux-пакеты — на Linux либо через WSL, когда это поддерживается
@@ -111,6 +119,9 @@ make test
 встроенного MCP endpoint, screenshots всех тем в desktop/mobile-размерах и
 настоящую headless Electron lifecycle-проверку. Она подтверждает, что Kestrel
 слушает только `127.0.0.1` и завершается после закрытия desktop-окна.
+
+`make electron-audit` проверяет сгенерированное дерево Electron-зависимостей,
+а `make package-audit` — оба Node-дерева внутри desktop-пакета.
 
 ## Связанные проекты
 
