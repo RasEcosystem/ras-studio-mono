@@ -5,7 +5,7 @@ Ras Ecosystem services. It is intended to shorten context recovery before
 reading the source code; it does not replace the code, repository `README`
 files, or repository-specific instructions.
 
-The snapshot was verified on **2026-08-27** against the local checkouts and the
+The snapshot was last updated on **2026-09-04** against the local checkouts and the
 official GitHub repositories. Exact revisions are listed in the
 [ecosystem map](ecosystem.md#repository-snapshot).
 
@@ -26,21 +26,20 @@ documents before connecting live data or changing wire models.
 
 ## Most Important Current Facts
 
-- `RasStudio -> RasHub -> RasGate -> RAC -> RAS` is the target architecture.
-  Studio now reaches RasHub for the complete public RasGate controller surface;
-  cluster and infobase integration is still pending.
+- `RasStudio -> RasHub -> RAS endpoint -> assigned RasGate -> RAC -> RAS` is the
+  target architecture. Studio addresses resources by `RasEndpointId`; Hub
+  resolves the execution Gate and RAS `host:port`.
 - The Electron shell, loopback Kestrel host, Blazor Interactive Server, themes,
   and local SQLite settings are implemented and operational.
 - The RasGates page supports server-side paging/search, create/update/delete,
-  activation, and shadow/live status. Clusters remains a placeholder and there
-  is no Infobases page.
+  activation, revision-safe updates, and shadow/live status. RAS endpoints have
+  their own CRUD page, and Clusters reads/refreshes endpoint-owned shadow data.
+  There is no Infobases page yet.
 - `RasStudio.Infrastructure` references `RasHub.Contracts`, maps wire contracts
   into Application models, and exposes the RasHub HTTP adapter.
-- The superproject records the contracts submodule at `53b16a5`, while the
-  working checkout is at `a15d1fd`. The original user state therefore already
-  contains `M src/RasHub.Contracts`; do not reset it automatically.
-- `make build`, `make run`, and `make test` invoke `git submodule update` and can
-  move the contracts checkout back to `53b16a5` on the `dev` branch.
+- The intended contracts revision is `25b453d` from RasHub `0.1.1`. Until the
+  superproject gitlink change is committed, commands that invoke
+  `git submodule update` can move the checkout back to the recorded revision.
 
 ## Source-of-Truth Order
 

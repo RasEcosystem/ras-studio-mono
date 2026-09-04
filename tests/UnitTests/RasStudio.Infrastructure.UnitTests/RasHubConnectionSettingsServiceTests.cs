@@ -57,15 +57,34 @@ public sealed class RasHubConnectionSettingsServiceTests
                 settings.GetRequiredConnection().ApiKey);
 
             await settings.SaveAsync(new SaveRasHubConnection(
-                    "http://new-hub.example",
+                    "http://hub.example/rashub/",
                     null),
                 TestContext.Current.CancellationToken);
 
             var preserved = settings.GetRequiredConnection();
-            Assert.Equal("http://new-hub.example/", preserved.BaseAddress.AbsoluteUri);
+            Assert.Equal("http://hub.example/rashub/", preserved.BaseAddress.AbsoluteUri);
             Assert.Equal(
                 "0123456789abcdef0123456789abcdef",
                 preserved.ApiKey);
+
+            var exception = await Assert.ThrowsAsync<RasHubConnectionValidationException>(() =>
+                settings.SaveAsync(new SaveRasHubConnection(
+                        "http://new-hub.example",
+                        null),
+                    TestContext.Current.CancellationToken));
+            Assert.Contains("new RasHub API key", exception.Message);
+            Assert.Equal(
+                "http://hub.example/rashub/",
+                settings.GetRequiredConnection().BaseAddress.AbsoluteUri);
+
+            await settings.SaveAsync(new SaveRasHubConnection(
+                    "http://new-hub.example",
+                    "fedcba9876543210fedcba9876543210"),
+                TestContext.Current.CancellationToken);
+
+            var replaced = settings.GetRequiredConnection();
+            Assert.Equal("http://new-hub.example/", replaced.BaseAddress.AbsoluteUri);
+            Assert.Equal("fedcba9876543210fedcba9876543210", replaced.ApiKey);
 
             await settings.ClearAsync(TestContext.Current.CancellationToken);
 
@@ -76,6 +95,9 @@ public sealed class RasHubConnectionSettingsServiceTests
             var log = string.Join(Environment.NewLine, logger.Messages);
             Assert.DoesNotContain(
                 "0123456789abcdef0123456789abcdef",
+                log);
+            Assert.DoesNotContain(
+                "fedcba9876543210fedcba9876543210",
                 log);
             Assert.DoesNotContain("hub.example", log);
         }

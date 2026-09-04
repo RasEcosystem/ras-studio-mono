@@ -1,9 +1,10 @@
 @page "/ras-gates"
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IRasGateService RasGateService
 @inject IRasHubConnectionSettings ConnectionSettings
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject TimeProvider TimeProvider
 @inject ILogger<RasGates> Logger
 
 <AppPageTitle Title="RasGates"/>
@@ -121,7 +122,7 @@
                         <HeaderContent>
                             <MudTh>Status</MudTh>
                             <MudTh>RasGate</MudTh>
-                            <MudTh>Endpoint</MudTh>
+                            <MudTh>Gate API</MudTh>
                             <MudTh>Remote instance</MudTh>
                             <MudTh>Changed</MudTh>
                             <MudTh Class="text-right">Actions</MudTh>
@@ -144,8 +145,8 @@
                                     @context.Id.ToString("D")
                                 </MudText>
                             </MudTd>
-                            <MudTd DataLabel="Endpoint">
-                                <MudText Typo="Typo.body2">@FormatEndpoint(context)</MudText>
+                            <MudTd DataLabel="Gate API">
+                                <MudText Typo="Typo.body2">@FormatGateAddress(context)</MudText>
                             </MudTd>
                             <MudTd DataLabel="Remote instance">
                                 @if (GetStatus(context.Id) is { } status)
@@ -288,6 +289,7 @@
     private readonly Dictionary<Guid, string> _statusErrors = [];
     private RasHubConnectionState _connection = new(string.Empty, false);
     private RasGatePage _page = new([], 0, 1, 10, 0);
+    private Task _pollTask = Task.CompletedTask;
     private Guid? _busyGateId;
     private string? _loadError;
     private string? _searchText;
@@ -300,7 +302,35 @@
     {
         _connection = ConnectionSettings.Current;
         if (_connection.IsConfigured)
+        {
             await LoadPageAsync();
+            _pollTask = PollAsync();
+        }
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1), TimeProvider);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(async () =>
+                {
+                    if (_busyGateId is not null)
+                        return;
+
+                    await LoadPageAsync();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "RasGate shadow polling stopped unexpectedly");
+        }
     }
 
     private async Task LoadPageAsync()
@@ -462,6 +492,7 @@
                     values.Url,
                     values.Port,
                     values.IsActive,
+                    gate.ConfigurationRevision,
                     values.ApiKey),
                 cancellationToken),
             $"{gate.Name} was updated.",
@@ -479,7 +510,8 @@
                     gate.Name,
                     gate.Url,
                     gate.Port,
-                    isActive),
+                    isActive,
+                    gate.ConfigurationRevision),
                 cancellationToken),
             isActive ? $"{gate.Name} was activated." : $"{gate.Name} was deactivated.",
             "Unable to change RasGate activity.");
@@ -499,7 +531,7 @@
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete RasGate?",
-            $"Delete {gate.Name}? RasHub will soft-delete the registration and its shadow resources.",
+            $"Delete {gate.Name}? Assigned RAS endpoints will be unavailable until they are reassigned or the Gate is restored.",
             "Delete",
             cancelText: "Cancel");
 
@@ -567,7 +599,19 @@
                 "RasGate operation {Operation} failed for {RasGateId}",
                 operationName,
                 gateId);
-            Snackbar.Add(GetErrorMessage(exception, fallbackError), Severity.Error);
+            var message = exception is RasHubApiException
+            {
+                Code: "ras_gate_concurrency_conflict"
+            }
+                ? "This RasGate changed in RasHub. Its latest values have been reloaded."
+                : GetErrorMessage(exception, fallbackError);
+            Snackbar.Add(message, Severity.Error);
+
+            if (exception is RasHubApiException
+                {
+                    Code: "ras_gate_concurrency_conflict"
+                })
+                await LoadPageAsync();
         }
         finally
         {
@@ -628,7 +672,7 @@
         return "No persisted status observation is available.";
     }
 
-    private static string FormatEndpoint(RasGate gate)
+    private static string FormatGateAddress(RasGate gate)
     {
         return $"{gate.Url.TrimEnd('/')}:{gate.Port}";
     }
@@ -650,10 +694,18 @@
         };
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _disposeToken.Cancel();
-        _disposeToken.Dispose();
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
     }
 
     private sealed record StatusLoadResult(

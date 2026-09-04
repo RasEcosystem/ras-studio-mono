@@ -39,7 +39,7 @@ read-only tools; настройки провайдера и модели хра�
 ``` text
 Окно Electron → Kestrel на 127.0.0.1 → Blazor Server
                                         ↓
-                       RasHub → RasGate → RAC → RAS
+            RasHub → RAS endpoint → назначенный RasGate → RAC → RAS
 ```
 
 Настройки приложения хранятся в единой локальной SQLite-базе:
@@ -54,6 +54,7 @@ read-only tools; настройки провайдера и модели хра�
 
 - .NET 10 SDK
 - Node.js 22 или новее
+- RasHub 0.1.1 или новее для управления RAS endpoints
 - Windows 10/11 либо дистрибутив Linux, поддерживаемый .NET и Electron
 
 Клонируйте репозиторий вместе с submodules:

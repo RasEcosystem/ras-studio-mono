@@ -29,6 +29,7 @@ dotnet build "$REPOSITORY_ROOT/RasStudio.sln" --no-restore -m:1
 
 electron_manifest="$REPOSITORY_ROOT/src/RasStudio.Web/bin/Debug/net10.0/.electron/package.json"
 electron_security_hook="$REPOSITORY_ROOT/src/RasStudio.Web/bin/Debug/net10.0/.electron/custom_main.js"
+electron_builder_config="$REPOSITORY_ROOT/src/RasStudio.Web/Properties/electron-builder.json"
 
 if [[ ! -s "$electron_security_hook" ]]; then
     echo "Electron security hook was not copied to the application output." >&2
@@ -36,19 +37,33 @@ if [[ ! -s "$electron_security_hook" ]]; then
 fi
 
 if ! rg --quiet 'if \(!app\.requestSingleInstanceLock\(\)\)' "$electron_security_hook" ||
-    ! rg --quiet 'process\.exit\(0\)' "$electron_security_hook"; then
-    echo "Electron startup hook does not stop duplicate instances before backend startup." >&2
+    ! rg --quiet 'process\.exit\(0\)' "$electron_security_hook" ||
+    ! rg --quiet 'app\.setDesktopName' "$electron_security_hook" ||
+    ! rg --quiet 'app\.setAppUserModelId' "$electron_security_hook"; then
+    echo "Electron startup hook does not configure application identity or single-instance startup." >&2
+    exit 1
+fi
+
+electron_window_icon="$REPOSITORY_ROOT/src/RasStudio.Web/bin/Debug/net10.0/Assets/rasstudio-window.png"
+
+if [[ ! -s "$electron_window_icon" ]]; then
+    echo "Electron window icon was not copied to the application output." >&2
     exit 1
 fi
 
 electron_configuration="$(
     node -e '
         const manifest = require(process.argv[1]);
-        process.stdout.write(`${manifest.singleInstance}\n${manifest.devDependencies.electron}\n`);
-    ' "$electron_manifest"
+        const builder = require(process.argv[2]);
+        process.stdout.write(
+            `${manifest.singleInstance}\n` +
+            `${manifest.devDependencies.electron}\n` +
+            `${manifest.name}\n` +
+            `${builder.linux.desktop.entry.StartupWMClass}\n`);
+    ' "$electron_manifest" "$electron_builder_config"
 )"
 
-if [[ "$electron_configuration" != $'true\n43.4.0' ]]; then
+if [[ "$electron_configuration" != $'true\n43.4.0\ncom.rasecosystem.rasstudio-mono\ncom.rasecosystem.rasstudio-mono' ]]; then
     echo "Unexpected Electron configuration in $electron_manifest." >&2
     printf '%s\n' "$electron_configuration" >&2
     exit 1

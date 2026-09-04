@@ -1,6 +1,8 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Extensions;
+using RasStudio.Application.Clusters;
+using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasGates;
 using RasStudio.Application.RasHub;
 using RasStudio.Infrastructure.RasHub;
@@ -20,8 +22,13 @@ public static class DependencyInjection
         services.AddScoped<IRasHubConnectionSettings>(provider =>
             provider.GetRequiredService<RasHubConnectionSettingsService>());
 
+        services.AddScoped<IRasGateService, RasHubRasGateClient>();
+        services.AddScoped<IRasEndpointService, RasHubRasEndpointClient>();
+        services.AddScoped<IRasClusterService, RasHubClusterClient>();
+        services.AddScoped<IRasHubInfoService, RasHubInfoClient>();
+
         services
-            .AddHttpClient<IRasGateService, RasHubRasGateClient>(client =>
+            .AddHttpClient<RasHubApiClient>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(60);
             })

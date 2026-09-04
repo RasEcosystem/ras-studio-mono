@@ -1,0 +1,546 @@
+@page "/ras-endpoints"
+@implements IDisposable
+@inject IRasEndpointService RasEndpointService
+@inject IRasGateService RasGateService
+@inject IRasHubConnectionSettings ConnectionSettings
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<RasEndpoints> Logger
+
+<AppPageTitle Title="RAS endpoints"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="RAS endpoints"
+              Subtitle="Manage RAS administration servers and their assigned RasGate executors"
+              Icon="@Icons.Material.Filled.Link">
+    <HeaderActions>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.Add"
+                   Disabled="@(!_connection.IsConfigured || _gateOptions.Count == 0 || _busyEndpointId is not null)"
+                   OnClick="AddAsync">
+            Add RAS endpoint
+        </MudButton>
+    </HeaderActions>
+    <ChildContent>
+        @if (!_connection.IsConfigured)
+        {
+            <MudPaper Class="app-card" Elevation="1">
+                <AppEmptyState Title="Connect to RasHub"
+                               Description="Configure a RasHub URL and user API key before managing RAS endpoints."
+                               Icon="@Icons.Material.Outlined.Hub">
+                    <Actions>
+                        <MudButton Href="/settings"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Settings">
+                            Open settings
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                @if (_gateOptions.Count == 0 && !_loading)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        Register a RasGate before adding a RAS endpoint.
+                        <MudButton Href="/ras-gates"
+                                   Variant="Variant.Text"
+                                   Color="Color.Warning"
+                                   Class="ml-2">
+                            Open RasGates
+                        </MudButton>
+                    </MudAlert>
+                }
+
+                @if (_loadError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudStack Row
+                                  AlignItems="AlignItems.Center"
+                                  Justify="Justify.SpaceBetween"
+                                  Spacing="2">
+                            <MudText Typo="Typo.body2">@_loadError</MudText>
+                            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="LoadAsync">
+                                Retry
+                            </MudButton>
+                        </MudStack>
+                    </MudAlert>
+                }
+
+                <MudPaper Class="app-card ras-endpoints-card" Elevation="1">
+                    <MudStack Row
+                              AlignItems="AlignItems.Center"
+                              Justify="Justify.FlexEnd"
+                              Class="mb-2">
+                        <MudTooltip Text="Reload RAS endpoints">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                                           Color="Color.Primary"
+                                           Disabled="@(_loading || _busyEndpointId is not null)"
+                                           OnClick="LoadAsync"
+                                           aria-label="Reload RAS endpoints"/>
+                        </MudTooltip>
+                    </MudStack>
+
+                    @if (_loading)
+                    {
+                        <MudProgressLinear Indeterminate Color="Color.Primary" Class="mb-2"/>
+                    }
+
+                    <MudTable T="RasEndpoint"
+                              Items="@_page.Items"
+                              Hover
+                              Elevation="0"
+                              Breakpoint="Breakpoint.Md"
+                              RowsPerPage="@int.MaxValue"
+                              Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Status</MudTh>
+                            <MudTh>RAS endpoint</MudTh>
+                            <MudTh>Address</MudTh>
+                            <MudTh>RasGate</MudTh>
+                            <MudTh>Last used</MudTh>
+                            <MudTh Class="text-right">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Status">
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Variant="Variant.Outlined"
+                                         Icon="@StatusIcon(context)"
+                                         Color="@StatusColor(context)">
+                                    @StatusLabel(context)
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="RAS endpoint">
+                                <MudText Typo="Typo.body2">@context.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @context.Id.ToString("D")
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Address">
+                                <MudText Typo="Typo.body2">@FormatAddress(context)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="RasGate">
+                                @if (GetGate(context.RasGateId) is { } gate)
+                                {
+                                    <MudText Typo="Typo.body2">@gate.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @(gate.IsActive ? "Active" : "Inactive")
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Warning">Unavailable</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Last used">
+                                <MudText Typo="Typo.body2">@FormatTime(context.LastSeenAt)</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Changed @FormatTime(context.UpdatedAt)
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Actions" Class="text-right">
+                                @if (_busyEndpointId == context.Id)
+                                {
+                                    <MudProgressCircular Indeterminate Size="Size.Small" Color="Color.Primary"/>
+                                }
+                                else
+                                {
+                                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                             Size="Size.Small"
+                                             Dense
+                                             AnchorOrigin="Origin.BottomRight"
+                                             TransformOrigin="Origin.TopRight"
+                                             Disabled="@(_busyEndpointId is not null)"
+                                             AriaLabel="@($"Actions for {context.Name}")">
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Storage"
+                                                     Href="@($"/clusters?rasEndpointId={context.Id:D}")">
+                                            View clusters
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit"
+                                                     OnClick="@(() => EditAsync(context))">
+                                            Edit endpoint
+                                        </MudMenuItem>
+                                        <MudDivider/>
+                                        <MudMenuItem Icon="@(context.IsActive
+                                                               ? Icons.Material.Outlined.PauseCircle
+                                                               : Icons.Material.Outlined.PlayCircle)"
+                                                     IconColor="@(context.IsActive ? Color.Warning : Color.Success)"
+                                                     OnClick="@(() => SetActiveAsync(context, !context.IsActive))">
+                                            @(context.IsActive ? "Deactivate" : "Activate")
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.DeleteOutline"
+                                                     IconColor="Color.Error"
+                                                     OnClick="@(() => DeleteAsync(context))">
+                                            Delete
+                                        </MudMenuItem>
+                                    </MudMenu>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <AppEmptyState Title="No RAS endpoints configured"
+                                           Description="Add an administration server and assign it to a RasGate."
+                                           Icon="@Icons.Material.Filled.Link">
+                                <Actions>
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Outlined.Add"
+                                               Disabled="@(_gateOptions.Count == 0)"
+                                               OnClick="AddAsync">
+                                        Add RAS endpoint
+                                    </MudButton>
+                                </Actions>
+                            </AppEmptyState>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    <MudDivider Class="my-3"/>
+
+                    <MudStack Row
+                              Wrap="Wrap.Wrap"
+                              AlignItems="AlignItems.Center"
+                              Justify="Justify.SpaceBetween"
+                              Spacing="2">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @_page.TotalCount.ToString("N0") RAS endpoint(s)
+                        </MudText>
+
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSelect T="int"
+                                       Label="Per page"
+                                       Value="@_pageSize"
+                                       ValueChanged="PageSizeChangedAsync"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Disabled="@(_loading || _busyEndpointId is not null)">
+                                <MudSelectItem Value="10">10</MudSelectItem>
+                                <MudSelectItem Value="25">25</MudSelectItem>
+                                <MudSelectItem Value="50">50</MudSelectItem>
+                                <MudSelectItem Value="100">100</MudSelectItem>
+                            </MudSelect>
+
+                            @if (_page.TotalPages > 1)
+                            {
+                                <MudPagination Count="@_page.TotalPages"
+                                               Selected="@_pageNumber"
+                                               SelectedChanged="PageChangedAsync"
+                                               ShowFirstButton
+                                               ShowLastButton
+                                               Disabled="@(_loading || _busyEndpointId is not null)"/>
+                            }
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        }
+    </ChildContent>
+</AppPageShell>
+
+@code {
+    private static readonly DialogOptions EditorDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = true,
+        BackdropClick = false
+    };
+
+    private readonly CancellationTokenSource _disposeToken = new();
+    private RasHubConnectionState _connection = new(string.Empty, false);
+    private RasEndpointPage _page = new([], 0, 1, 10, 0);
+    private IReadOnlyList<RasGate> _gateOptions = [];
+    private Guid? _busyEndpointId;
+    private string? _loadError;
+    private int _pageNumber = 1;
+    private int _pageSize = 10;
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connection = ConnectionSettings.Current;
+        if (_connection.IsConfigured)
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_loading)
+            return;
+
+        _connection = ConnectionSettings.Current;
+        if (!_connection.IsConfigured)
+            return;
+
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            _gateOptions = await RasGateService.GetAllAsync(
+                cancellationToken: _disposeToken.Token);
+            var page = await RasEndpointService.GetPageAsync(
+                _pageNumber,
+                _pageSize,
+                _disposeToken.Token);
+
+            if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+            {
+                _pageNumber = page.TotalPages;
+                page = await RasEndpointService.GetPageAsync(
+                    _pageNumber,
+                    _pageSize,
+                    _disposeToken.Token);
+            }
+
+            _page = page;
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load RAS endpoints from RasHub");
+            _loadError = GetErrorMessage(exception, "Unable to load RAS endpoints from RasHub.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task PageChangedAsync(int page)
+    {
+        _pageNumber = page;
+        await LoadAsync();
+    }
+
+    private async Task PageSizeChangedAsync(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        var values = await ShowEditorAsync(null);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            null,
+            cancellationToken => RasEndpointService.CreateAsync(
+                new CreateRasEndpoint(
+                    values.Name,
+                    values.RasGateId,
+                    values.Host,
+                    values.Port,
+                    values.IsActive),
+                cancellationToken),
+            "RAS endpoint was added.",
+            "Unable to add the RAS endpoint.",
+            true);
+    }
+
+    private async Task EditAsync(RasEndpoint endpoint)
+    {
+        var values = await ShowEditorAsync(endpoint);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            endpoint.Id,
+            cancellationToken => RasEndpointService.UpdateAsync(
+                endpoint.Id,
+                new UpdateRasEndpoint(
+                    values.Name,
+                    values.RasGateId,
+                    values.Host,
+                    values.Port,
+                    values.IsActive,
+                    endpoint.ConfigurationRevision),
+                cancellationToken),
+            $"{endpoint.Name} was updated.",
+            "Unable to update the RAS endpoint.");
+    }
+
+    private Task SetActiveAsync(RasEndpoint endpoint, bool isActive)
+    {
+        return ExecuteAsync(
+            endpoint.Id,
+            cancellationToken => RasEndpointService.UpdateAsync(
+                endpoint.Id,
+                new UpdateRasEndpoint(
+                    endpoint.Name,
+                    endpoint.RasGateId,
+                    endpoint.Host,
+                    endpoint.Port,
+                    isActive,
+                    endpoint.ConfigurationRevision),
+                cancellationToken),
+            isActive
+                ? $"{endpoint.Name} was activated."
+                : $"{endpoint.Name} was deactivated.",
+            "Unable to change the RAS endpoint activity.");
+    }
+
+    private async Task DeleteAsync(RasEndpoint endpoint)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete RAS endpoint?",
+            $"Delete {endpoint.Name}? RasHub will soft-delete the endpoint and invalidate its cluster and infobase shadow.",
+            "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        await ExecuteAsync(
+            endpoint.Id,
+            cancellationToken => RasEndpointService.DeleteAsync(
+                endpoint.Id,
+                cancellationToken),
+            $"{endpoint.Name} was deleted.",
+            "Unable to delete the RAS endpoint.");
+    }
+
+    private async Task<RasEndpointEditorValues?> ShowEditorAsync(RasEndpoint? endpoint)
+    {
+        var parameters = new DialogParameters<RasEndpointEditorDialog>
+        {
+            { dialog => dialog.GateOptions, _gateOptions }
+        };
+        if (endpoint is not null)
+            parameters.Add(dialog => dialog.Endpoint, endpoint);
+
+        var dialog = await DialogService.ShowAsync<RasEndpointEditorDialog>(
+            endpoint is null ? "Add RAS endpoint" : $"Edit {endpoint.Name}",
+            parameters,
+            EditorDialogOptions);
+        var result = await dialog.Result;
+
+        return result is { Canceled: false, Data: RasEndpointEditorValues values }
+            ? values
+            : null;
+    }
+
+    private async Task ExecuteAsync<T>(
+        Guid? endpointId,
+        Func<CancellationToken, Task<T>> operation,
+        string successMessage,
+        string fallbackError,
+        bool resetToFirstPage = false)
+    {
+        if (_busyEndpointId is not null)
+            return;
+
+        try
+        {
+            _busyEndpointId = endpointId ?? Guid.Empty;
+            await operation(_disposeToken.Token);
+            Snackbar.Add(successMessage, Severity.Success);
+
+            if (resetToFirstPage)
+                _pageNumber = 1;
+
+            await LoadAsync();
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "RAS endpoint operation failed for {RasEndpointId}",
+                endpointId);
+
+            var message = exception is RasHubApiException
+            {
+                Code: "ras_endpoint_concurrency_conflict"
+            }
+                ? "This RAS endpoint changed in RasHub. Its latest values have been reloaded."
+                : GetErrorMessage(exception, fallbackError);
+            Snackbar.Add(message, Severity.Error);
+
+            if (exception is RasHubApiException
+                {
+                    Code: "ras_endpoint_concurrency_conflict"
+                })
+                await LoadAsync();
+        }
+        finally
+        {
+            _busyEndpointId = null;
+        }
+    }
+
+    private RasGate? GetGate(Guid rasGateId)
+    {
+        return _gateOptions.FirstOrDefault(gate => gate.Id == rasGateId);
+    }
+
+    private string StatusLabel(RasEndpoint endpoint)
+    {
+        if (!endpoint.IsActive)
+            return "Inactive";
+
+        return GetGate(endpoint.RasGateId) is { IsActive: true }
+            ? "Active"
+            : "Gate unavailable";
+    }
+
+    private string StatusIcon(RasEndpoint endpoint)
+    {
+        if (!endpoint.IsActive)
+            return Icons.Material.Outlined.PauseCircle;
+
+        return GetGate(endpoint.RasGateId) is { IsActive: true }
+            ? Icons.Material.Outlined.CheckCircle
+            : Icons.Material.Outlined.WarningAmber;
+    }
+
+    private Color StatusColor(RasEndpoint endpoint)
+    {
+        if (!endpoint.IsActive)
+            return Color.Default;
+
+        return GetGate(endpoint.RasGateId) is { IsActive: true }
+            ? Color.Success
+            : Color.Warning;
+    }
+
+    private static string FormatAddress(RasEndpoint endpoint)
+    {
+        return endpoint.Host.Contains(':', StringComparison.Ordinal)
+            ? $"[{endpoint.Host}]:{endpoint.Port}"
+            : $"{endpoint.Host}:{endpoint.Port}";
+    }
+
+    private static string FormatTime(DateTime? value)
+    {
+        return value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—";
+    }
+
+    private static string GetErrorMessage(Exception exception, string fallback)
+    {
+        return exception switch
+        {
+            RasHubApiException apiException when apiException.TraceId is not null =>
+                $"{apiException.Message} Trace: {apiException.TraceId}",
+            RasHubApiException apiException => apiException.Message,
+            RasHubConnectionNotConfiguredException notConfigured => notConfigured.Message,
+            _ => fallback
+        };
+    }
+
+    public void Dispose()
+    {
+        _disposeToken.Cancel();
+        _disposeToken.Dispose();
+    }
+}

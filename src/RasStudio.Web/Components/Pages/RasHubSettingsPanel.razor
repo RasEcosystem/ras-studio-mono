@@ -1,5 +1,6 @@
 @inject IRasHubConnectionSettings ConnectionSettings
 @inject IRasGateService RasGateService
+@inject IRasHubInfoService RasHubInfoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<RasHubSettingsPanel> Logger
@@ -15,7 +16,7 @@
             </MudStack>
 
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                RasStudio uses the RasHub public API to manage RasGate registrations.
+                RasStudio uses the RasHub public API to manage RasGates, RAS endpoints, and their resources.
                 The user API key is encrypted locally and is never displayed again.
             </MudText>
 
@@ -50,7 +51,7 @@
                       Dense>
                 @(_connection.IsConfigured
                     ? $"A RasHub connection is saved for {_connection.BaseUrl}."
-                    : "Save a RasHub URL and a user API key to enable gateway management.")
+                    : "Save a RasHub URL and a user API key to enable infrastructure management.")
             </MudAlert>
         </MudStack>
     </MudPaper>
@@ -98,9 +99,14 @@
     private bool _saving;
     private bool _testing;
 
-    private string ApiKeyHelperText => _connection.HasApiKey
-        ? "Leave empty to keep the saved key, or enter a replacement."
-        : "Use a RasHub user API key with permission to manage RasGates.";
+    private bool HubUrlChanged => _connection.HasApiKey &&
+                                  !HasSameHubUrl(_connection.BaseUrl, _hubUrl);
+
+    private string ApiKeyHelperText => HubUrlChanged
+        ? "Enter a new key because the RasHub URL changed."
+        : _connection.HasApiKey
+            ? "Leave empty to keep the saved key, or enter a replacement."
+            : "Use a RasHub user API key with permission to manage RasGates and RAS endpoints.";
 
     protected override void OnInitialized()
     {
@@ -140,7 +146,7 @@
 
     private string? ValidateHubApiKey(string? value)
     {
-        if (!_connection.HasApiKey && string.IsNullOrWhiteSpace(value))
+        if ((!_connection.HasApiKey || HubUrlChanged) && string.IsNullOrWhiteSpace(value))
             return "RasHub user API key is required";
         if (value is not null &&
             !string.Equals(value, value.Trim(), StringComparison.Ordinal))
@@ -149,6 +155,27 @@
             return "RasHub user API key cannot exceed 64 characters";
 
         return null;
+    }
+
+    private static bool HasSameHubUrl(string currentValue, string candidateValue)
+    {
+        if (!Uri.TryCreate(currentValue.Trim(), UriKind.Absolute, out var current) ||
+            !Uri.TryCreate(candidateValue.Trim(), UriKind.Absolute, out var candidate))
+            return false;
+
+        return NormalizePath(current).Equals(NormalizePath(candidate));
+    }
+
+    private static Uri NormalizePath(Uri uri)
+    {
+        var builder = new UriBuilder(uri)
+        {
+            Path = uri.AbsolutePath.EndsWith("/", StringComparison.Ordinal)
+                ? uri.AbsolutePath
+                : $"{uri.AbsolutePath}/"
+        };
+
+        return builder.Uri;
     }
 
     private async Task SaveAsync()
@@ -188,12 +215,15 @@
         try
         {
             _testing = true;
+            var info = await RasHubInfoService.GetAsync();
+            EnsureSupportedVersion(info.Version);
             var page = await RasGateService.GetPageAsync(1, 1);
             Logger.LogInformation(
-                "RasHub connection test succeeded with {RasGateCount} RasGate registrations",
+                "RasHub {RasHubVersion} connection test succeeded with {RasGateCount} RasGate registrations",
+                info.Version,
                 page.TotalCount);
             Snackbar.Add(
-                $"Connected to RasHub. {page.TotalCount:N0} RasGate registration(s) available.",
+                $"Connected to RasHub {info.Version}. {page.TotalCount:N0} RasGate registration(s) available.",
                 Severity.Success);
         }
         catch (Exception exception)
@@ -241,6 +271,14 @@
             RasHubConnectionValidationException validationException => validationException.Message,
             _ => fallback
         };
+    }
+
+    private static void EnsureSupportedVersion(string version)
+    {
+        if (!RasHubCompatibility.IsSupported(version))
+            throw new RasHubApiException(
+                $"RasHub {version} is not supported. Upgrade RasHub to " +
+                $"{RasHubCompatibility.MinimumSupportedVersion} or newer.");
     }
 
 }

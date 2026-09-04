@@ -65,6 +65,12 @@ public sealed class RasHubConnectionSettingsService(
         var current = settingsProvider.Settings;
         var protectedApiKey = current.ProtectedApiKey;
 
+        if (connection.ApiKey is null &&
+            !string.IsNullOrWhiteSpace(protectedApiKey) &&
+            !HasSameBaseAddress(current.BaseUrl, baseAddress))
+            throw new RasHubConnectionValidationException(
+                "A new RasHub API key is required when the RasHub URL changes.");
+
         if (connection.ApiKey is not null)
         {
             ValidateApiKey(connection.ApiKey);
@@ -90,6 +96,18 @@ public sealed class RasHubConnectionSettingsService(
         cancellationToken.ThrowIfCancellationRequested();
         await settingsProvider.UpdateAsync(new StoredRasHubConnectionSettings());
         logger.LogInformation("RasHub connection settings were removed");
+    }
+
+    private static bool HasSameBaseAddress(string currentValue, Uri baseAddress)
+    {
+        try
+        {
+            return NormalizeBaseAddress(currentValue).Equals(baseAddress);
+        }
+        catch (RasHubConnectionValidationException)
+        {
+            return false;
+        }
     }
 
     private static Uri NormalizeBaseAddress(string value)

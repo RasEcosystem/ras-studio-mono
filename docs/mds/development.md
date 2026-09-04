@@ -1,7 +1,7 @@
 # RasStudio Mono Working Guide
 
-Baseline snapshot: 2026-08-27, `dev` @ `02de6e1`. Active feature branch:
-`feature/rashub-gate-management`.
+Current snapshot: 2026-09-04, `dev` @ `fa2839f`, with uncommitted RasHub API
+adaptation work.
 
 ## Before any task
 
@@ -14,20 +14,17 @@ git -C src/RasHub.Contracts status --short --branch
 git -C src/RasHub.Contracts log -1 --oneline --decorate
 ```
 
-The following was the initial state when the audit began, before the new context
-files were created:
+The contracts synchronization target for RasHub `0.1.1` is:
 
 ```text
-superproject HEAD:                     02de6e1 (dev, origin/dev)
-recorded contracts gitlink:            53b16a5
-actual contracts checkout:             a15d1fd (detached)
-local submodule origin/main ref:        a15d1fd
-superproject status:                    M src/RasHub.Contracts
-official GitHub head, checked externally: 2f40b84
+superproject HEAD:                     fa2839f (dev)
+recorded contracts gitlink in HEAD:     2f40b84
+intended contracts checkout/gitlink:    25b453d (detached, origin/main)
+RasHub version requiring this contract: 0.1.1
 ```
 
-This is the user's initial state. Do not reset/check out or update the gitlink
-unless the task specifically calls for synchronizing contracts.
+The `25b453d` gitlink update is intentional: it adds `RasEndpoint`, endpoint
+ownership in search contracts, and Gate/endpoint configuration revisions.
 
 ## Submodule trap
 
@@ -38,18 +35,18 @@ make build/run/test -> restore -> submodules
 submodules -> git submodule sync + git submodule update --init --recursive
 ```
 
-On `dev`, an ordinary `make build` can switch contracts from the actual
-`a15d1fd` back to the recorded `53b16a5`. Conversely,
+Until the gitlink change is committed, an ordinary `make build` can switch
+contracts from the intended `25b453d` back to the recorded `2f40b84`. Conversely,
 `make submodules-update` switches to the remote branch and leaves a dirty
 gitlink.
 
 Before running any of these commands, first decide which revision the task
 requires:
 
-- `53b16a5` — recorded revision of the current `dev`;
-- `a15d1fd` — current user checkout and the gitlink in official Studio `main`;
-- `2f40b84` — revision used by the actual current RasHub and official Contracts
-  main.
+- `2f40b84` — pre-endpoint contract revision recorded by the current Studio
+  commit;
+- `25b453d` — RasHub `0.1.1` contract revision required by the endpoint-aware
+  Studio client.
 
 If the goal is not to change contracts, it is safer to preserve the current
 checkout and use `dotnet ... --no-restore` after verifying the assets.

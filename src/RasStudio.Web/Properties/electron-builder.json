@@ -7,7 +7,12 @@
             "AppImage"
         ],
         "category": "Utility",
-        "icon": "bin/Assets/rasstudio.png"
+        "icon": "bin/Assets/rasstudio.png",
+        "desktop": {
+            "entry": {
+                "StartupWMClass": "com.rasecosystem.rasstudio-mono"
+            }
+        }
     },
     "win": {
         "target": [

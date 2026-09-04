@@ -1,0 +1,178 @@
+@using System.Net
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" ValidationDelay="0">
+            <MudStack Spacing="3">
+                @if (GateOptions.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense>
+                        Add a RasGate before registering a RAS endpoint.
+                    </MudAlert>
+                }
+
+                <MudTextField T="string"
+                              @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Required
+                              RequiredError="Name is required"
+                              Validation="@(new Func<string?, string?>(ValidateName))"
+                              MaxLength="200"
+                              Counter="200"
+                              Immediate/>
+
+                <MudSelect T="Guid"
+                           @bind-Value="_rasGateId"
+                           Label="RasGate"
+                           Variant="Variant.Outlined"
+                           Required
+                           RequiredError="Select a RasGate">
+                    @foreach (var gate in GateOptions)
+                    {
+                        <MudSelectItem T="Guid" Value="@gate.Id">
+                            @gate.Name · @FormatGateAddress(gate)@(!gate.IsActive ? " · inactive" : null)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="8">
+                        <MudTextField T="string"
+                                      @bind-Value="_host"
+                                      Label="RAS host"
+                                      Placeholder="ras.example.net"
+                                      Variant="Variant.Outlined"
+                                      Required
+                                      RequiredError="RAS host is required"
+                                      Validation="@(new Func<string?, string?>(ValidateHost))"
+                                      MaxLength="255"
+                                      Immediate/>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int"
+                                         @bind-Value="_port"
+                                         Label="RAS port"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="65535"
+                                         Required/>
+                    </MudItem>
+                </MudGrid>
+
+                <MudSwitch T="bool"
+                           @bind-Value="_isActive"
+                           Color="Color.Primary"
+                           Label="Active"/>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="px-4 pb-4"
+                  Style="width: 100%;">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Save"
+                       Disabled="@(GateOptions.Count == 0)"
+                       OnClick="SaveAsync">
+                @(Endpoint is null ? "Add RAS endpoint" : "Save changes")
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm _form = null!;
+    private string _name = string.Empty;
+    private Guid _rasGateId;
+    private string _host = "localhost";
+    private int _port = 1545;
+    private bool _isActive = true;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public RasEndpoint? Endpoint { get; set; }
+
+    [Parameter][EditorRequired] public IReadOnlyList<RasGate> GateOptions { get; set; } = [];
+
+    protected override void OnInitialized()
+    {
+        if (Endpoint is null)
+        {
+            _rasGateId = GateOptions.FirstOrDefault(gate => gate.IsActive)?.Id ??
+                         GateOptions.FirstOrDefault()?.Id ??
+                         Guid.Empty;
+            return;
+        }
+
+        _name = Endpoint.Name;
+        _rasGateId = GateOptions.Any(gate => gate.Id == Endpoint.RasGateId)
+            ? Endpoint.RasGateId
+            : Guid.Empty;
+        _host = Endpoint.Host;
+        _port = Endpoint.Port;
+        _isActive = Endpoint.IsActive;
+    }
+
+    private static string? ValidateName(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Name is required" : null;
+    }
+
+    private static string? ValidateHost(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "RAS host is required";
+
+        var candidate = value.Trim();
+        if (candidate.Length >= 2 && candidate[0] == '[' && candidate[^1] == ']')
+            candidate = candidate[1..^1];
+
+        if (IPAddress.TryParse(candidate, out _))
+            return null;
+
+        candidate = candidate.TrimEnd('.');
+        return candidate.Length is > 0 and <= 255 &&
+               Uri.CheckHostName(candidate) == UriHostNameType.Dns
+            ? null
+            : "Enter a valid DNS name or IP address";
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid || _rasGateId == Guid.Empty)
+            return;
+
+        var host = _host.Trim();
+        if (host.Length >= 2 && host[0] == '[' && host[^1] == ']')
+            host = host[1..^1];
+
+        MudDialog.Close(DialogResult.Ok(new RasEndpointEditorValues(
+            _name.Trim(),
+            _rasGateId,
+            host,
+            _port,
+            _isActive)));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private static string FormatGateAddress(RasGate gate)
+    {
+        if (!Uri.TryCreate(gate.Url, UriKind.Absolute, out var address))
+            return $"{gate.Url} · port {gate.Port}";
+
+        return new UriBuilder(address) { Port = gate.Port }
+            .Uri
+            .ToString()
+            .TrimEnd('/');
+    }
+}

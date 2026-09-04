@@ -1,13 +1,12 @@
 # RasHub: backend and public API
 
-Snapshot: local `/home/zmaxb/Nextcloud/prj/RasHub`, `dev` @ `cbe8881`,
-2026-08-27. The application code matches official `main` @ `86d4f93`; the only
-tree difference is the enabled manual trigger for the release workflow.
+Snapshot: official `main` @ `7e3cc15`, 2026-09-04, inspected through a fetched
+temporary checkout. Current public release version is `0.1.1`.
 
 RasHub is the only correct server boundary for RasStudio. It stores Gate
-registrations and shadow infrastructure, authenticates users, submits remote
-work to the task engine, interprets RAC output, and securely publishes the
-result.
+registrations, managed RAS endpoints and their Gate assignments, and
+endpoint-owned shadow infrastructure. It authenticates users, submits remote
+work to the task engine, interprets RAC output, and securely publishes results.
 
 ## Layers
 
@@ -39,10 +38,14 @@ Main entry points:
 - `src/RasHub.Infrastructure/Extensions/ServiceCollectionExtensions.cs` —
   infrastructure DI.
 - `src/RasHub.Application/RasGates/Services/RasGateRegistry.cs` — the single
-  registration lifecycle.
+  Gate registration lifecycle.
+- `src/RasHub.Application/RasEndpoints/Services/RasEndpointRegistry.cs` — RAS
+  endpoint lifecycle and optimistic concurrency.
+- `src/RasHub.Application/RasEndpoints/Services/RasEndpointExecutionTargetResolver.cs`
+  — resolves endpoint address plus assigned active Gate for execution.
 - `src/RasHub.Infrastructure/RasGates/Client/RasGateSession.cs` — Gate transport.
-- `src/RasHub.Infrastructure/Database/RasGateSyncPublisher.cs` — guarded
-  publication.
+- `src/RasHub.Infrastructure/Database/RasEndpointSyncPublisher.cs` —
+  endpoint/Gate revision-guarded publication.
 - `src/RasHub.Web/Infrastructure/RasGates/RasGateTaskOptions.cs` — feature task
   retry/timeout/deduplication/concurrency policy.
 - `docs/code-map.md` and `docs/rac-compatibility.md` in RasHub — detailed sources
@@ -57,36 +60,39 @@ governed by `src/RasHub.BackgroundTasks/AGENTS.md`.
 
 - `RasGate`: Hub GUID, name, URL/port, protected Gate API key, active/deleted
   state, `ConfigurationRevision`, Gate/RAC observations, and audit timestamps.
-- `RasCluster`: internal EF GUID, parent Gate GUID, external RAC GUID, cluster
-  settings, observation, audit data, and soft-delete state.
+- `RasEndpoint`: Hub GUID, parent Gate GUID, name, RAS host/port,
+  active/deleted state, `ConfigurationRevision`, `LastSeenAt`, and audit
+  timestamps.
+- `RasCluster`: internal EF GUID, parent endpoint GUID, external RAC GUID,
+  cluster settings, observation, audit data, and soft-delete state.
 - `RasInfobase`: internal EF GUID, parent cluster EF GUID, external RAC GUID,
   name/description, observation, audit data, and soft-delete state.
 
 Remote uniqueness:
 
-- cluster: `(RasGateId, ExternalId)`;
+- cluster: `(RasEndpointId, ExternalId)`;
 - infobase: `(RasClusterId, ExternalId)`.
 
 ### DbContexts
 
-- `RasHubDbContext`: Gate, cluster, infobase, and application settings.
+- `RasHubDbContext`: Gate, endpoint, cluster, infobase, and application settings.
 - `ApplicationDbContext`: ASP.NET Core Identity.
 
 Both use PostgreSQL, but they have separate migrations/history and do not form a
 shared atomic transaction.
 
-EF interceptors enforce audit/soft delete, increment the Gate configuration
-revision, invalidate derived shadow data, and apply Data Protection to the Gate
-key. Bypassing normal tracked `SaveChanges` requires these invariants to be
-reproduced explicitly.
+EF interceptors enforce audit/soft delete, increment Gate and endpoint
+configuration revisions, invalidate endpoint-owned shadow when its RAS identity
+changes, and apply Data Protection to the Gate key. Bypassing normal tracked
+`SaveChanges` requires these invariants to be reproduced explicitly.
 
 ## Background execution
 
 ```text
 Controller/monitor -> IBackgroundTaskEngine
  -> lane worker -> fresh DI scope -> Application handler
- -> RasGate gateway -> remote validation
- -> IRasGateSyncPublisher -> one guarded SaveChanges
+ -> resolve RasEndpoint + assigned RasGate -> RasGate gateway -> remote validation
+ -> IRasEndpointSyncPublisher -> one guarded SaveChanges
 ```
 
 Three independent FIFO lanes:
@@ -95,8 +101,8 @@ Three independent FIFO lanes:
 - `Synchronization` — status/snapshot synchronization;
 - `Maintenance` — housekeeping.
 
-Deduplication and concurrency keys are process-local. All operations for one
-Gate are normally serialized with the `ras-gate:{id}` key. Queues, schedules,
+Deduplication and concurrency keys are process-local. Status work is serialized
+by Gate; resource work is serialized by `ras-endpoint:{id}`. Queues, schedules,
 and results are lost after a restart; horizontal replicas have no shared
 coordination. Production must remain single-replica until distributed
 coordination and recovery are implemented.
@@ -112,10 +118,11 @@ RasHub separates:
 - the `ApiKey` scheme for `/api/v1`, using the `X-Api-Key` header.
 
 All public API operations require a key belonging to a non-blocked user. The
-additional `ManageRasGates` policy (currently the Admin role) is required for:
+additional policies (currently granted to the Admin role) are required for:
 
-- registering/updating/deleting a Gate;
-- creating/updating/removing a cluster.
+- `ManageRasGates`: registering/updating/deleting a Gate;
+- `ManageRasEndpoints`: registering/updating/deleting a RAS endpoint and
+  creating/updating/removing a cluster through it.
 
 Live status, live/refresh cluster and infobase operations, and all reads require
 an API key, but not the admin policy.
@@ -126,7 +133,7 @@ properties; do not mix the key types in client storage or telemetry.
 
 ## Common wire format
 
-Current server contract revision: `RasHub/src/RasHub.Contracts` @ `2f40b84`.
+Current server contract revision: `RasHub/src/RasHub.Contracts` @ `25b453d`.
 
 ```json
 {
@@ -162,8 +169,9 @@ or:
 
 ## HTTP API `/api/v1`
 
-In the tables, `{gate}` is the Hub `RasGateModel.Id`; `{cluster}` and
-`{infobase}` are external RAC IDs in the parent scope.
+In the tables, `{gate}` is `RasGateModel.Id`, `{endpoint}` is
+`RasEndpointModel.Id`, and `{cluster}`/`{infobase}` are external RAC IDs in the
+endpoint-owned parent scope.
 
 ### Info and Gate registrations
 
@@ -181,8 +189,10 @@ In the tables, `{gate}` is the Hub `RasGateModel.Id`; `{cluster}` and
 
 `CreateRasGateRequest`: name 1..200, URL 1..2048, port 1..65535, key 1..512,
 active defaults to true. `UpdateRasGateRequest.ApiKey = null` preserves the old
-key only if URL/port remain unchanged. Changing the endpoint requires a new key;
-otherwise, Hub returns 400.
+key only if URL/port remain unchanged. Updates require
+`ExpectedConfigurationRevision`; stale updates return
+`ras_gate_concurrency_conflict` with HTTP 409. Changing the Gate API address
+requires a new key; otherwise, Hub returns 400.
 
 By default, Gate search checks Name; Fields can add/select Name/Url.
 
@@ -203,9 +213,27 @@ Health states: `Unknown`, `Offline`, `Degraded`, `Ready`. A fresh Gate with a
 missing, expired, or unavailable RAC observation is `Degraded`; the RAC version
 string itself does not participate in classification.
 
+### RAS endpoints
+
+Base: `/ras-endpoints`.
+
+| Method | Route | Response | Policy/semantics |
+|---|---|---|---|
+| `GET` | `/ras-endpoints` | `PageResult<RasEndpointModel>` | Persisted, paged |
+| `GET` | `/ras-endpoints/all` | list of `RasEndpointModel` | Persisted, unlimited |
+| `GET` | `/ras-endpoints/{endpoint}` | `RasEndpointModel` | Persisted one |
+| `POST` | `/ras-endpoints` | `RasEndpointModel`, HTTP 201 | `ManageRasEndpoints`; assign name/host/port to a Gate |
+| `PUT` | `/ras-endpoints/{endpoint}` | `RasEndpointModel` | `ManageRasEndpoints`; full replacement with expected revision |
+| `DELETE` | `/ras-endpoints/{endpoint}` | `RasEndpointModel` | `ManageRasEndpoints`; soft-delete |
+
+`UpdateRasEndpointRequest` requires `ExpectedConfigurationRevision`; stale
+updates return `ras_endpoint_concurrency_conflict`. A Gate reassignment advances
+the endpoint revision but preserves the endpoint's resource identity. Address,
+deactivation, and deletion changes invalidate endpoint observations/shadow.
+
 ### Clusters
 
-Base: `/ras-gates/{gate}/clusters`.
+Base: `/ras-endpoints/{endpoint}/clusters`.
 
 | Method | Suffix | Response | Semantics |
 |---|---|---|---|
@@ -216,17 +244,18 @@ Base: `/ras-gates/{gate}/clusters`.
 | `POST` | `/live/all` | all `ClusterModel` | Complete RAC snapshot, refresh shadow |
 | `POST` | `/live/{cluster}` | `ClusterModel` | RAC info, targeted upsert |
 | `POST` | `/shadow/refresh` | `ShadowRefreshResponse` | Complete refresh summary |
-| `POST` | `` | `ClusterModel`, HTTP 201 | `ManageRasGates`; body `CreateClusterRequest`; one-shot create + read-back |
-| `PATCH` | `/{cluster}` | `ClusterModel` | `ManageRasGates`; body `UpdateClusterRequest`; one-shot update + read-back |
-| `POST` | `/{cluster}/remove` | `ClusterModel` | `ManageRasGates`; optional `RemoveClusterRequest`; one-shot remote remove |
+| `POST` | `` | `ClusterModel`, HTTP 201 | `ManageRasEndpoints`; body `CreateClusterRequest`; one-shot create + read-back |
+| `PATCH` | `/{cluster}` | `ClusterModel` | `ManageRasEndpoints`; body `UpdateClusterRequest`; one-shot update + read-back |
+| `POST` | `/{cluster}/remove` | `ClusterModel` | `ManageRasEndpoints`; optional `RemoveClusterRequest`; one-shot remote remove |
 
 Global persisted search:
 
 - `GET /clusters/shadow/search` — paged;
 - `GET /clusters/shadow/search/all` — unlimited.
 
-By default, search checks Name; Fields can select Name/Host. An optional Gate
-filter narrows the scope. Results include the Gate ID/name plus `ClusterModel`.
+By default, search checks Name; Fields can select Name/Host. An optional RAS
+endpoint filter narrows the scope. Results include the endpoint ID/name plus
+`ClusterModel`.
 
 After a successful remove, the controller returns the `ClusterModel` read from
 shadow **before** the remote operation. After confirmed RAC success, the
@@ -234,7 +263,7 @@ corresponding row and its infobases have already been soft-deleted.
 
 ### Infobases
 
-Base: `/ras-gates/{gate}/clusters/{cluster}/infobases`.
+Base: `/ras-endpoints/{endpoint}/clusters/{cluster}/infobases`.
 
 | Method | Suffix | Response | Semantics |
 |---|---|---|---|
@@ -251,15 +280,17 @@ Global persisted search:
 - `GET /infobases/shadow/search` — paged;
 - `GET /infobases/shadow/search/all` — unlimited.
 
-By default, search checks Name; Fields can select Name/Description. Optional Gate
-and cluster filters narrow the scope, and the Cluster filter requires a Gate
-filter. Results include parent Gate/cluster IDs/names. Infobase mutations do not
-exist yet.
+By default, search checks Name; Fields can select Name/Description. Optional
+endpoint and cluster filters narrow the scope, and the Cluster filter requires
+an endpoint filter. Results include parent endpoint/cluster IDs/names. Infobase
+mutations do not exist yet.
 
 ## Resource models
 
-- `RasGateModel`: Hub ID, name, URL, port, active, created/updated. The Gate key
-  is not returned.
+- `RasGateModel`: Hub ID, name, URL, port, active, configuration revision, and
+  created/updated timestamps. The Gate key is not returned.
+- `RasEndpointModel`: Hub ID, Gate ID, name, RAS host/port, active,
+  `LastSeenAt`, configuration revision, and timestamps.
 - `RasGateStatusResponse`: health state, Gate instance/version, RAC
   availability/version, and separate observation times.
 - `ClusterModel`: external ID, name/host/port, RAC settings, and `ObservedAt`.
@@ -274,16 +305,18 @@ task payloads.
 
 ## RasGate/RAC flow
 
-1. The controller checks the active parent state and, when necessary, resource
-   existence.
-2. `InteractiveTaskRunner` enqueues a typed task with a per-Gate concurrency key.
-3. The handler loads the tracked Gate and captures `ConfigurationRevision`.
+1. The controller checks the active endpoint state and, when necessary,
+   resource existence.
+2. `InteractiveTaskRunner` enqueues a typed task with a per-endpoint concurrency
+   key.
+3. The handler resolves the endpoint address and assigned active Gate, then
+   captures both configuration revisions.
 4. A status task calls `/rasgate/status`, then `/rac/status`. A resource task
    obtains the RAC version from cache or `/rac/status`, after which the adapter
    calls `/rac/execute`; the resource path does not call `/rasgate/status`.
 5. The envelope, timeout, outcome, exit code, and all parsed output are validated.
-6. Under revision/active/deleted guards, the publisher saves a complete or
-   targeted snapshot with one `SaveChangesAsync`.
+6. Under endpoint and Gate revision/active/deleted guards, the publisher saves
+   a complete or targeted snapshot with one `SaveChangesAsync`.
 7. The controller returns `ApiResponse<T>`. It normally reads the public
    projection after publication; remove is the exception and returns the saved
    pre-remove model after successful soft delete.
@@ -291,7 +324,8 @@ task payloads.
 Hub and Gate communicate only over HTTP/JSON: gRPC and protobuf are absent;
 there is no user-facing SignalR API, and SignalR is used by the Blazor framework.
 
-The RAC version cache lasts five minutes per `(GateId, Revision)`. The minimum
+The RAC version cache lasts five minutes per `(GateId, Revision)`. Every RAC
+resource command carries the resolved endpoint `host:port`. The minimum
 production profile is `8.3.27.2214`. Create/update use authoritative
 `cluster info` after a write. Mutations are single-attempt; an unknown outcome
 is not retried. Remove first saves the pre-remove model for the response and,
@@ -318,9 +352,9 @@ make dev-up
 - Production: Linux AMD64 container, one-shot migrations, non-root/read-only,
   localhost binding behind a TLS reverse proxy.
 
-Latest official prerelease in this snapshot: `v0.1.0-beta.1`.
+Current Hub version in this snapshot: `0.1.1`.
 
-## Important points for the future Studio client
+## Important points for the Studio client
 
 - Call only RasHub `/api/v1`, never RasGate.
 - Store the HTTP status, `X-Trace-Id`, and envelope error separately.
@@ -333,7 +367,9 @@ Latest official prerelease in this snapshot: `v0.1.0-beta.1`.
 - Do not persist request-scoped RAC credentials.
 - Pin the contracts revision and add serialization/API integration tests at the
   same time as the first client adapter.
-- Design secure storage for the user API key before adding it to local settings.
+- Address cluster and infobase resources by `RasEndpointId`, never by Gate ID.
+- Send the last observed configuration revision on Gate and endpoint updates,
+  and reload after the specific HTTP 409 concurrency error.
 
 ## Known limitations and risks
 
@@ -345,6 +381,8 @@ Latest official prerelease in this snapshot: `v0.1.0-beta.1`.
 - `/all` and literal substring search may scale poorly.
 - Public API endpoints have no separate rate limiting.
 - Shadow clusters/infobases are updated only by explicit calls.
+- The `AddRasEndpoints` migration clears existing cluster/infobase shadow;
+  endpoints must be registered and refreshed after upgrade.
 - Empty successful collection stdout is treated as Unknown and does not clear
   the old shadow.
 - Only clusters and infobases are supported, with RAC `>= 8.3.27.2214`.

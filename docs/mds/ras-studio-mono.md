@@ -1,7 +1,7 @@
 # RasStudio Mono: Actual Architecture
 
-Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
-`feature/rashub-gate-management`; this document includes that worktree state.
+Snapshot: `dev` @ `fa2839f`, 2026-09-04. This document includes the uncommitted
+RasHub `0.1.1` endpoint adaptation worktree state.
 
 ## Product status
 
@@ -20,7 +20,11 @@ Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
 - The complete public RasGate API client: query, search, administration, and
   shadow/live status operations.
 - RasGate server paging/search, create/edit/delete, activate/deactivate, and
-  status UI.
+  revision-safe status UI.
+- RAS endpoint paging, query, create/edit/delete, Gate assignment, and
+  revision-safe updates through the Hub API.
+- Endpoint-scoped cluster shadow paging and explicit live refresh through the
+  endpoint's assigned Gate.
 - RasHub-style structured diagnostics with bootstrap/fatal lifecycle logging,
   enriched HTTP events, an in-memory warning/error ring buffer, and daily
   rolling files under the application data directory.
@@ -32,16 +36,17 @@ Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
 
 ### Not implemented yet
 
-- Loading clusters or infobases.
-- Cluster/infobase CRUD, live/refresh, search, pagination, or details.
+- Cluster create/update/remove, global search, or details.
+- Loading or managing infobases.
 - An infobases page.
 - CI, signing, an update feed, an SBOM, or an automated release pipeline.
 
 Consequently, the diagram in the README currently ends here in practice:
 
 ```text
-Electron -> loopback Kestrel -> Blazor UI -> RasHub RasGate API
-                                            -X-> cluster/infobase API
+Electron -> loopback Kestrel -> Blazor UI -> RasHub API
+                                            -> RAS endpoint
+                                            -> assigned RasGate -> RAC
 ```
 
 ## Projects and actual dependencies
@@ -57,8 +62,8 @@ RasStudio.Application -> Nava.Settings -> EF Core SQLite (transitive)
 | Project | Current contents | Start reading at |
 |---|---|---|
 | `src/RasStudio.Web` | Composition root, Electron, Blazor UI, diagnostics/logging, themes, assets, and package profiles | `Program.cs`, `Infrastructure/Logging`, `Infrastructure/Diagnostics` |
-| `src/RasStudio.Application` | Settings plus RasHub/RasGate ports and application models | `Settings/ApplicationSettings.cs`, `RasGates`, `RasHub` |
-| `src/RasStudio.Infrastructure` | RasHub connection persistence, HTTP transport, contract mapping, and DI | `DependencyInjection.cs`, `RasHub/RasHubRasGateClient.cs` |
+| `src/RasStudio.Application` | Settings plus RasHub, RasGate, RAS endpoint, and cluster ports/models | `Settings`, `RasGates`, `RasEndpoints`, `Clusters`, `RasHub` |
+| `src/RasStudio.Infrastructure` | RasHub connection persistence, shared HTTP transport, feature clients, contract mapping, and DI | `DependencyInjection.cs`, `RasHub/RasHubApiClient.cs` |
 | `src/RasHub.Contracts` | Shared Hub wire types as a Git submodule | `src/RasHub.Contracts/src/RasHub.Contracts/RasHub.Contracts.csproj` |
 
 `RasHub.Contracts` is consumed only by Infrastructure. Web uses Application
@@ -179,9 +184,10 @@ Configuration keys in use:
 
 | Route | File | Actual behavior |
 |---|---|---|
-| `/` | `Components/Pages/Home.razor` | Uptime and warning/error diagnostics plus live RasGate count |
+| `/` | `Components/Pages/Home.razor` | Warning/error diagnostics plus live RasGate and RAS endpoint counts |
 | `/ras-gates` | `Components/Pages/RasGates.razor` | Complete RasGate query/search/admin/status UI through RasHub |
-| `/clusters` | `Components/Pages/Clusters.razor` | Static empty state |
+| `/ras-endpoints` | `Components/Pages/RasEndpoints.razor` | Endpoint CRUD, Gate assignment, activity, and revision conflicts |
+| `/clusters` | `Components/Pages/Clusters.razor` | Endpoint selection, paged shadow reads, and live shadow refresh |
 | `/health-events` | `Components/Pages/HealthEvents.razor` | Current-process warnings/errors, filters, traces, and exception details |
 | `/settings` | `Components/Pages/Settings.razor` | Theme and protected RasHub connection configuration |
 | `/error` | `Components/Pages/Error.razor` | Error UI and diagnostic trace ID |
@@ -192,7 +198,7 @@ Composition:
 - `Components/App.razor` — HTML document, assets, and render mode.
 - `Components/Routes.razor` — Router and `MainLayout`.
 - `Components/Layout/MainLayout.razor` — app bar, mini drawer, and providers.
-- `Components/Layout/NavMenu.razor` — Home/RasGates/Clusters/Application events/Settings.
+- `Components/Layout/NavMenu.razor` — Home/RasGates/RAS endpoints/Clusters/Application events/Settings.
 - `Components/AppPageShell.razor` — common page width/header/content layout.
 - `Components/AppEmptyState.razor` and `AppLoadingState.razor` — shared states.
 

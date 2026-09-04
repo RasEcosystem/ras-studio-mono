@@ -1,4 +1,5 @@
 const {app} = require("electron");
+const {name: applicationId} = require("./package.json");
 
 function isLocalApplicationUrl(value) {
     try {
@@ -30,6 +31,12 @@ function secureApplicationWindow(contents) {
 }
 
 exports.onStartup = function onStartup() {
+    if (process.platform === "linux") {
+        app.setDesktopName(`${applicationId}.desktop`);
+    } else if (process.platform === "win32") {
+        app.setAppUserModelId(applicationId);
+    }
+
     // ElectronNET's generated lock runs too late to prevent a duplicate backend.
     if (!app.requestSingleInstanceLock()) {
         process.exit(0);

@@ -1,6 +1,7 @@
 @page "/"
 @implements IAsyncDisposable
 @inject IRasGateService RasGateService
+@inject IRasEndpointService RasEndpointService
 @inject IRasHubConnectionSettings ConnectionSettings
 @inject ApplicationDiagnostics Diagnostics
 @inject TimeProvider TimeProvider
@@ -46,9 +47,18 @@
                             ValueAriaLabel="View RasGates"/>
             </div>
             <div class="home-card">
+                <MetricCard Title="RAS endpoints"
+                            Value="@_rasEndpointCount"
+                            Detail="@RasEndpointDetail"
+                            Icon="@Icons.Material.Filled.Link"
+                            Color="Color.Primary"
+                            ValueHref="/ras-endpoints"
+                            ValueAriaLabel="View RAS endpoints"/>
+            </div>
+            <div class="home-card">
                 <MetricCard Title="Clusters"
-                            Value="0"
-                            Detail="Discovered 1C:Enterprise clusters"
+                            Value="—"
+                            Detail="@ClusterDetail"
                             Icon="@Icons.Material.Filled.Storage"
                             Color="Color.Primary"
                             ValueHref="/clusters"
@@ -62,9 +72,18 @@
     private readonly CancellationTokenSource _disposeToken = new();
     private Task _pollTask = Task.CompletedTask;
     private string _rasGateCount = "—";
+    private string _rasEndpointCount = "—";
 
     private string RasGateDetail => ConnectionSettings.Current.IsConfigured
         ? "Gateways registered in RasHub"
+        : "Connect RasHub in Settings";
+
+    private string RasEndpointDetail => ConnectionSettings.Current.IsConfigured
+        ? "RAS servers managed through RasGates"
+        : "Connect RasHub in Settings";
+
+    private string ClusterDetail => ConnectionSettings.Current.IsConfigured
+        ? "View endpoint-owned cluster shadow"
         : "Connect RasHub in Settings";
 
     protected override async Task OnInitializedAsync()
@@ -78,13 +97,19 @@
                     1,
                     cancellationToken: _disposeToken.Token);
                 _rasGateCount = page.TotalCount.ToString("N0");
+
+                var endpointPage = await RasEndpointService.GetPageAsync(
+                    1,
+                    1,
+                    _disposeToken.Token);
+                _rasEndpointCount = endpointPage.TotalCount.ToString("N0");
             }
             catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
             {
             }
             catch (Exception exception)
             {
-                Logger.LogWarning(exception, "Unable to load the RasGate dashboard count");
+                Logger.LogWarning(exception, "Unable to load RasHub dashboard counts");
             }
         }
 
@@ -98,10 +123,7 @@
         try
         {
             while (await timer.WaitForNextTickAsync(_disposeToken.Token))
-                await InvokeAsync(() =>
-                {
-                    StateHasChanged();
-                });
+                await InvokeAsync(() => { StateHasChanged(); });
         }
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {

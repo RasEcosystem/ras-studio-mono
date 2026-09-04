@@ -38,7 +38,7 @@ tools; provider and model settings are stored locally.
 ``` text
 Electron window → Kestrel on 127.0.0.1 → Blazor Server
                                       ↓
-                     RasHub → RasGate → RAC → RAS
+               RasHub → RAS endpoint → assigned RasGate → RAC → RAS
 ```
 
 Application preferences are stored in one local SQLite settings database:
@@ -53,6 +53,7 @@ Application preferences are stored in one local SQLite settings database:
 
 - .NET 10 SDK
 - Node.js 22 or newer
+- RasHub 0.1.1 or newer for RAS endpoint management
 - Windows 10/11 or a Linux distribution supported by .NET and Electron
 
 Clone the repository with its submodules:

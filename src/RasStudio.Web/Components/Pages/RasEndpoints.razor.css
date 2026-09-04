@@ -1,0 +1,10 @@
+.ras-endpoints-card {
+    min-width: 0;
+    overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+    .ras-endpoints-card {
+        overflow-x: visible;
+    }
+}

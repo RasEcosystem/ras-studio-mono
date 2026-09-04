@@ -140,6 +140,7 @@ for theme in "${themes[@]}"; do
     if [[ "$theme" == "Carbon" ]]; then
         pages=(
             "ras-gates|/ras-gates"
+            "ras-endpoints|/ras-endpoints"
             "clusters|/clusters"
             "assistant|/assistant"
             "health-events|/health-events"
