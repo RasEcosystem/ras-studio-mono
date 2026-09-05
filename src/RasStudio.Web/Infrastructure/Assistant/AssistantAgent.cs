@@ -8,7 +8,7 @@ public sealed class AssistantAgent(
     RasStudioMcpClient mcpClient)
 {
     private const string SystemPrompt = """
-                                        You are the RasStudio assistant. The available tools currently expose RasStudio application metadata only. Use them for questions about the application's identity, version, or description. Do not claim access to live RAS infrastructure data. Respond in the user's language and use Markdown when it improves readability.
+                                        You are the RasStudio assistant. Use get_rasstudio_info for application identity, get_rashub_status for RasHub connectivity and compatibility, get_infrastructure_overview for a broad RasHub/RasGate/RAS endpoint inventory, and get_application_issues for recent application warnings or errors. When asked whether RasGates are online, healthy, or having problems, call get_rasgate_status and clearly name any affected active gates. RasGate health is the last status persisted by RasHub, not a live refresh; include observation times when freshness matters. Do not claim access to RAS infrastructure data beyond what the tools return. Respond in the user's language and use Markdown when it improves readability.
                                         """;
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

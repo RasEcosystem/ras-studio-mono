@@ -20,9 +20,12 @@ managing 1C:Enterprise RAS infrastructure.
 
 The built-in assistant provides streaming responses through an Ollama- or
 OpenAI-compatible endpoint. It can use the protected embedded MCP server to
-read RasStudio application metadata through the `get_rasstudio_info` tool.
-Live RAS infrastructure tools are not implemented yet; provider and model
-settings are stored locally.
+read application metadata, check RasHub connectivity and compatibility, inspect
+the RasGate and RAS endpoint inventory, report recent application issues, and
+show persisted RasGate health. These read-only capabilities are exposed through
+`get_rasstudio_info`, `get_rashub_status`, `get_infrastructure_overview`,
+`get_application_issues`, and `get_rasgate_status`; provider and model settings
+are stored locally.
 
 ![RasStudio Mono Assistant page](docs/img/ras-studio-assistant.png)
 
