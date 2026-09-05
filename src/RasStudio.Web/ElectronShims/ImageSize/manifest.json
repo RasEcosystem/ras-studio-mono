@@ -1,6 +1,6 @@
 {
-    "name": "image-size",
-    "version": "3.0.0",
-    "private": true,
-    "main": "index.js"
+  "name": "image-size",
+  "version": "3.0.0",
+  "private": true,
+  "main": "index.js"
 }

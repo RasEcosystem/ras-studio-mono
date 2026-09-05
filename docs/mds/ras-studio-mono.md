@@ -293,6 +293,12 @@ desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
 developer's already-running production instance cannot make CI nondeterministic;
 the production manifest is still asserted to keep `singleInstance=true`.
 
+`make release` adds Electron and packaged dependency audits, creates the Linux
+AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
+desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
+developer's already-running production instance cannot make CI nondeterministic;
+the production manifest is still asserted to keep `singleInstance=true`.
+
 The visual smoke test captures 20 images: Home in four themes at desktop/mobile
 sizes and all primary routes, including Infobases, Application events,
 Assistant, and Settings, in Carbon. It checks security headers and a difference
