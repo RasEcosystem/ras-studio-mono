@@ -65,7 +65,7 @@ public sealed class ApplicationIssuesToolTests
             "Recent error"));
         var tool = new ApplicationIssuesTool(diagnostics, timeProvider);
 
-        var result = tool.GetApplicationIssues(hours: 1, level: "warning");
+        var result = tool.GetApplicationIssues(1, level: "warning");
 
         Assert.Equal("warnings", result.OverallState);
         Assert.Equal(1, result.MatchingCount);

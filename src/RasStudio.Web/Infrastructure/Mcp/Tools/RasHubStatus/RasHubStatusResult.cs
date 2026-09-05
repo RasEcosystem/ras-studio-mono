@@ -5,8 +5,7 @@ namespace RasStudio.Web.Infrastructure.Mcp.Tools.RasHubStatus;
 internal sealed record RasHubStatusResult(
     [property: JsonPropertyName("configured")]
     bool Configured,
-    [property: JsonPropertyName("state")]
-    string State,
+    [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("summary")]
     string Summary,
     [property: JsonPropertyName("baseUrl")]

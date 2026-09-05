@@ -12,8 +12,7 @@ internal sealed record InfrastructureOverviewResult(
     string Summary,
     [property: JsonPropertyName("checkedAt")]
     DateTimeOffset CheckedAt,
-    [property: JsonPropertyName("rasHub")]
-    RasHubStatusResult RasHub,
+    [property: JsonPropertyName("rasHub")] RasHubStatusResult RasHub,
     [property: JsonPropertyName("rasGates")]
     InfrastructureInventorySummary RasGates,
     [property: JsonPropertyName("rasEndpoints")]
@@ -22,8 +21,7 @@ internal sealed record InfrastructureOverviewResult(
     IReadOnlyList<string> Problems);
 
 internal sealed record InfrastructureInventorySummary(
-    [property: JsonPropertyName("state")]
-    string State,
+    [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("totalCount")]
     int? TotalCount,
     [property: JsonPropertyName("activeCount")]
@@ -34,8 +32,7 @@ internal sealed record InfrastructureInventorySummary(
     string? Problem);
 
 internal sealed record RasEndpointInventorySummary(
-    [property: JsonPropertyName("state")]
-    string State,
+    [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("totalCount")]
     int? TotalCount,
     [property: JsonPropertyName("activeCount")]

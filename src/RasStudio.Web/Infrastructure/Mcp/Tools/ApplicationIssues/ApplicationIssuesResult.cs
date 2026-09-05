@@ -13,8 +13,7 @@ internal sealed record ApplicationIssuesResult(
     DateTimeOffset WindowStartedAt,
     [property: JsonPropertyName("windowEndedAt")]
     DateTimeOffset WindowEndedAt,
-    [property: JsonPropertyName("level")]
-    string Level,
+    [property: JsonPropertyName("level")] string Level,
     [property: JsonPropertyName("lifetimeWarningCount")]
     long LifetimeWarningCount,
     [property: JsonPropertyName("lifetimeErrorCount")]
@@ -25,16 +24,13 @@ internal sealed record ApplicationIssuesResult(
     int ReturnedCount,
     [property: JsonPropertyName("hasMore")]
     bool HasMore,
-    [property: JsonPropertyName("issues")]
-    IReadOnlyList<ApplicationIssueItem> Issues);
+    [property: JsonPropertyName("issues")] IReadOnlyList<ApplicationIssueItem> Issues);
 
 internal sealed record ApplicationIssueItem(
-    [property: JsonPropertyName("id")]
-    long Id,
+    [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("timestamp")]
     DateTimeOffset Timestamp,
-    [property: JsonPropertyName("level")]
-    string Level,
+    [property: JsonPropertyName("level")] string Level,
     [property: JsonPropertyName("message")]
     string Message,
     [property: JsonPropertyName("sourceContext")]

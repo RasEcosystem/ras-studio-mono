@@ -19,10 +19,10 @@ public sealed class InfrastructureOverviewToolTests
         var endpointLastSeenAt = Now.UtcDateTime.AddMinutes(-5);
         var gateService = new StubRasGateService([activeGate, inactiveGate]);
         var endpointService = new StubRasEndpointService(
-            [
-                CreateEndpoint(activeGate.Id, "RAS-1", true, endpointLastSeenAt),
-                CreateEndpoint(inactiveGate.Id, "RAS-2", false, null)
-            ]);
+        [
+            CreateEndpoint(activeGate.Id, "RAS-1", true, endpointLastSeenAt),
+            CreateEndpoint(inactiveGate.Id, "RAS-2", false, null)
+        ]);
         var tool = CreateTool(true, gateService, endpointService);
 
         var result = await tool.GetInfrastructureOverviewAsync(
@@ -160,8 +160,8 @@ public sealed class InfrastructureOverviewToolTests
 
     private sealed class StubRasGateService : IRasGateService
     {
-        private readonly IReadOnlyList<RasGate>? _gates;
         private readonly Exception? _exception;
+        private readonly IReadOnlyList<RasGate>? _gates;
         private int _callCount;
 
         public StubRasGateService(IReadOnlyList<RasGate> gates)

@@ -16,10 +16,7 @@ public sealed class RasGateStatusToolTests
         var beta = CreateGate("Beta", false);
         var service = new StubRasGateService(
             [beta, alpha],
-            new Dictionary<Guid, ApplicationRasGateStatus>
-            {
-                [alpha.Id] = CreateStatus(RasGateHealth.Ready)
-            });
+            new Dictionary<Guid, ApplicationRasGateStatus> { [alpha.Id] = CreateStatus(RasGateHealth.Ready) });
         var tool = CreateTool(service);
 
         var result = await tool.GetRasGateStatusAsync(TestContext.Current.CancellationToken);
@@ -73,14 +70,8 @@ public sealed class RasGateStatusToolTests
         var beta = CreateGate("Beta", true);
         var service = new StubRasGateService(
             [alpha, beta],
-            new Dictionary<Guid, ApplicationRasGateStatus>
-            {
-                [alpha.Id] = CreateStatus(RasGateHealth.Ready)
-            },
-            new Dictionary<Guid, Exception>
-            {
-                [beta.Id] = new RasHubApiException("Status endpoint failed.")
-            });
+            new Dictionary<Guid, ApplicationRasGateStatus> { [alpha.Id] = CreateStatus(RasGateHealth.Ready) },
+            new Dictionary<Guid, Exception> { [beta.Id] = new RasHubApiException("Status endpoint failed.") });
         var tool = CreateTool(service);
 
         var result = await tool.GetRasGateStatusAsync(TestContext.Current.CancellationToken);
@@ -102,7 +93,7 @@ public sealed class RasGateStatusToolTests
         var service = new StubRasGateService(
             [],
             new Dictionary<Guid, ApplicationRasGateStatus>());
-        var tool = CreateTool(service, configured: false);
+        var tool = CreateTool(service, false);
 
         var result = await tool.GetRasGateStatusAsync(TestContext.Current.CancellationToken);
 

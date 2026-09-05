@@ -17,8 +17,7 @@ internal sealed record RasGateStatusResult(
     int ReadyCount,
     [property: JsonPropertyName("problemCount")]
     int ProblemCount,
-    [property: JsonPropertyName("gates")]
-    IReadOnlyList<RasGateStatusItem> Gates);
+    [property: JsonPropertyName("gates")] IReadOnlyList<RasGateStatusItem> Gates);
 
 internal sealed record RasGateStatusItem(
     [property: JsonPropertyName("id")] Guid Id,
@@ -27,8 +26,7 @@ internal sealed record RasGateStatusItem(
     string Address,
     [property: JsonPropertyName("isActive")]
     bool IsActive,
-    [property: JsonPropertyName("state")]
-    string State,
+    [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("hasProblem")]
     bool HasProblem,
     [property: JsonPropertyName("problem")]

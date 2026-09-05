@@ -40,12 +40,10 @@ var issuesTool = tools.SingleOrDefault(tool => tool.Name == issuesToolName)
                      $"The embedded MCP server did not publish {issuesToolName}.");
 
 foreach (var tool in new[] { infoTool, statusTool, rasHubStatusTool, overviewTool, issuesTool })
-{
     if (tool.ProtocolTool.Annotations?.ReadOnlyHint != true ||
         tool.ProtocolTool.Annotations.DestructiveHint != false)
         throw new InvalidOperationException(
             $"{tool.Name} must be explicitly read-only and non-destructive.");
-}
 
 var result = await infoTool.CallAsync();
 var structuredContent = result.StructuredContent?.ToString() ?? string.Empty;

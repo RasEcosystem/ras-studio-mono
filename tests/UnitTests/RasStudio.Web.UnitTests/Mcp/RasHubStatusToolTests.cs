@@ -111,8 +111,8 @@ public sealed class RasHubStatusToolTests
 
     private sealed class StubRasHubInfoService : IRasHubInfoService
     {
-        private readonly RasHubInfo? _info;
         private readonly Exception? _exception;
+        private readonly RasHubInfo? _info;
         private int _callCount;
 
         public StubRasHubInfoService(RasHubInfo info)
