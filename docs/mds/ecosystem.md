@@ -123,23 +123,16 @@ the old assignment from publishing.
 - Hub <-> Gate transport DTOs are private to RasHub Infrastructure and duplicate
   a small RasGate JSON contract; Hub and Gate do not share an assembly.
 
-## Repository Snapshot
+## Repository Compatibility Snapshot
 
-Updated on 2026-09-04 for the RasHub endpoint model.
+Verified on 2026-09-05 for the RasStudio `0.1.0` release candidate.
 
-| Repository / checkout | Local state | Official head | Important difference |
+| Repository | Studio compatibility point | Official state | Notes |
 |---|---|---|---|
-| `RasStudio` | `dev` @ `fa2839f`, dirty feature worktree | not re-fetched in this update | Adapting to RasHub `0.1.1` |
-| `RasStudio/src/RasHub.Contracts` | detached `25b453d`; superproject HEAD records `2f40b84` until the gitlink change is committed | `main` @ `25b453d` | Intended endpoint-aware contract checkout |
-| `RasHub` | inspected through a fetched temporary checkout | `main` @ `7e3cc15` | Contains RAS endpoints and release `0.1.1` |
-| `RasHub.Contracts` | consumed at `25b453d` | `main` @ `25b453d` | Adds `RasEndpoint` and endpoint-owned resource context |
-| `RasGate` | not reverified in this update | — | Still remains the thin command executor |
-
-Local paths to neighboring repositories:
-
-- `/home/zmaxb/Nextcloud/prj/RasHub`
-- `/home/zmaxb/Nextcloud/prj/RasHub.Contracts`
-- `/home/zmaxb/Nextcloud/prj/RasGate`
+| `RasStudio` | `dev`, version `0.1.0` | release candidate | Uses the endpoint-aware Hub API |
+| `RasStudio/src/RasHub.Contracts` | pinned gitlink `25b453d` | `main` @ `25b453d` | Adds `RasEndpoint` and endpoint-owned resource context |
+| `RasHub` | `0.1.1` | `main` @ `7e3cc15`, release `v0.1.1` | Provides RAS endpoints and resource operations |
+| `RasGate` | HTTP execution contract from `0.2.1` | `main` @ `8582a31`, release `v0.2.1` | Remains the thin command executor |
 
 ## System Constraints to Keep in Mind
 

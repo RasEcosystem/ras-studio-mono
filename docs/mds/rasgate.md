@@ -1,8 +1,8 @@
 # RasGate: HTTP-to-RAC Boundary
 
-Snapshot: local `/home/zmaxb/Nextcloud/prj/RasGate`, clean `main` @
-`8582a31`, 2026-08-27. The code matches release `v0.2.1`; the current `main`
-adds only ecosystem links to the README.
+Compatibility snapshot verified on 2026-09-05: official `main` @ `8582a31`.
+The code matches release `v0.2.1`; the current `main` adds only ecosystem links
+to the README.
 
 ## Purpose
 
@@ -225,8 +225,8 @@ or error code requires checking all of the following together:
 - resource gateways and Web integration tests;
 - mutation unknown-outcome mapping.
 
-Studio must not participate in this transport contract: its future client will
-use the public RasHub API.
+Studio does not participate in this transport contract: its client uses the
+public RasHub API.
 
 ## Test Coverage and Limitations
 

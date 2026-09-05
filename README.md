@@ -16,18 +16,45 @@ managing 1C:Enterprise RAS infrastructure.
 
 ![RasStudio Mono Home page running in an Electron desktop window](docs/img/ras-studio.png)
 
+## RAS management
+
+- register RasGates and assign RAS endpoints to them;
+- browse cluster shadows across all active RAS endpoints, filter and search them,
+  and synchronize, create, update, or remove clusters through RasHub;
+- browse infobase shadows across all active endpoints and clusters, narrow them
+  by endpoint and cluster, search globally, and synchronize complete or
+  individual live infobase state.
+
+1C:Enterprise server agent and cluster administrator credentials are sent only
+for the corresponding operation and are not stored by RasStudio.
+
+Operational names, addresses, identifiers, and timestamps are blurred in the
+screenshots below.
+
+### RasGate connections
+
+![RasStudio Mono RasGates page with sensitive infrastructure data blurred](docs/img/ras-studio-ras-gates.png)
+
+### Clusters
+
+![RasStudio Mono Clusters page with sensitive infrastructure data blurred](docs/img/ras-studio-clusters.png)
+
+### Infobases
+
+![RasStudio Mono Infobases page with sensitive infrastructure data blurred](docs/img/ras-studio-infobases.png)
+
 ## AI assistant
 
 The built-in assistant provides streaming responses through an Ollama- or
-OpenAI-compatible endpoint. It can use the protected embedded MCP server to
-read application metadata, check RasHub connectivity and compatibility, inspect
-the RasGate and RAS endpoint inventory, report recent application issues, and
-show persisted RasGate health. These read-only capabilities are exposed through
-`get_rasstudio_info`, `get_rashub_status`, `get_infrastructure_overview`,
-`get_application_issues`, and `get_rasgate_status`; provider and model settings
-are stored locally.
+unauthenticated OpenAI-compatible endpoint. It can use the protected embedded
+MCP server to read application metadata, check RasHub connectivity and
+compatibility, inspect the RasGate and RAS endpoint inventory, report recent
+application issues, and show persisted RasGate health. These read-only
+capabilities are exposed through `get_rasstudio_info`, `get_rashub_status`,
+`get_infrastructure_overview`, `get_application_issues`, and
+`get_rasgate_status`; endpoint and model settings are stored locally.
 
-![RasStudio Mono Assistant page](docs/img/ras-studio-assistant.png)
+![RasStudio Mono Assistant reporting the overall infrastructure status](docs/img/ras-studio-assistant.png)
 
 ## Technology stack
 

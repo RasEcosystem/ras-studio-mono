@@ -1,7 +1,7 @@
 # RasStudio Mono Working Guide
 
-Current snapshot: 2026-09-04, `dev` @ `fa2839f`, with uncommitted RasHub API
-adaptation work.
+Reviewed for the `0.1.0` release candidate on 2026-09-05. The canonical
+integration branch is `dev`.
 
 ## Before any task
 
@@ -17,16 +17,16 @@ git -C src/RasHub.Contracts log -1 --oneline --decorate
 The contracts synchronization target for RasHub `0.1.1` is:
 
 ```text
-superproject HEAD:                     fa2839f (dev)
-recorded contracts gitlink in HEAD:     2f40b84
-intended contracts checkout/gitlink:    25b453d (detached, origin/main)
+superproject branch:                    dev
+recorded contracts gitlink:             25b453d
+expected contracts checkout:            25b453d (detached, origin/main)
 RasHub version requiring this contract: 0.1.1
 ```
 
 The `25b453d` gitlink update is intentional: it adds `RasEndpoint`, endpoint
 ownership in search contracts, and Gate/endpoint configuration revisions.
 
-## Submodule trap
+## Submodule handling
 
 Dependency chain in the Makefile:
 
@@ -35,21 +35,10 @@ make build/run/test -> restore -> submodules
 submodules -> git submodule sync + git submodule update --init --recursive
 ```
 
-Until the gitlink change is committed, an ordinary `make build` can switch
-contracts from the intended `25b453d` back to the recorded `2f40b84`. Conversely,
-`make submodules-update` switches to the remote branch and leaves a dirty
-gitlink.
-
-Before running any of these commands, first decide which revision the task
-requires:
-
-- `2f40b84` — pre-endpoint contract revision recorded by the current Studio
-  commit;
-- `25b453d` — RasHub `0.1.1` contract revision required by the endpoint-aware
-  Studio client.
-
-If the goal is not to change contracts, it is safer to preserve the current
-checkout and use `dotnet ... --no-restore` after verifying the assets.
+`make build`, `make test`, and `make release` restore the recorded gitlink.
+`make submodules-update` intentionally follows the submodule's remote branch
+and may leave a dirty gitlink; use it only when updating the compatibility
+contract and commit the resulting gitlink deliberately.
 
 ## Prerequisites and toolchain
 
@@ -67,7 +56,7 @@ The following were available locally during verification:
 .NET SDK:       10.0.400
 Node.js:        24.13.0
 npm:            11.6.2
-visual browser: /usr/bin/google-chrome
+visual browser: Google Chrome
 ```
 
 `global.json`, `packages.lock.json`, `Directory.Packages.props`, a source
@@ -85,11 +74,14 @@ make build
 make run
 make format
 make format-check
-make test-unit
-make test-integration
+make dotnet-tests
+make visual
+make desktop-smoke
+make mcp-smoke
 make test
 make package-linux
 make package-windows
+make release
 ```
 
 Run `make package-linux` on Linux. Run `make package-windows` on Windows (Git
@@ -150,18 +142,14 @@ The visual script uses fixed ports 5181..5184 and does not clear the output
 directory. It does not perform approved-baseline comparison. The desktop script
 requires Node and an environment capable of running Electron headlessly.
 
-## Initial snapshot verification results
+## Release-candidate verification
 
-Executed on 2026-08-27 with the current contracts checkout `a15d1fd`:
-
-- `dotnet build RasStudio.sln --configuration Release --no-restore -m:1`:
-  **pass**, 0 warnings, 0 errors.
-- Visual smoke test: **pass**, 18 current screenshots.
-- Desktop lifecycle smoke test: **pass**.
-- `make test` as a single command did not reach the build: the sandbox denied
-  `git submodule sync` permission to write to `.git/config`. This is an
-  environment restriction, not a compile/test failure; the three substantive
-  stages were run directly.
+The 2026-09-05 audit verified a Release build with warnings treated as errors,
+118 unit/integration tests, all 20 visual captures, the authenticated MCP smoke
+suite, unpackaged and packaged Linux desktop lifecycle checks, Linux AppImage
+packaging, and NuGet/npm vulnerability audits. Re-run `make release` from a
+clean checkout before creating the version tag; the tagged GitHub Actions run
+also builds and audits the Windows installer and portable executable.
 
 The initial generated npm tree contained vulnerable `image-size 1.2.1`,
 affected by two high-severity advisories:
@@ -190,18 +178,13 @@ Do not use them as evidence of the current architecture or the health of HEAD.
 `make clean` recursively deletes all of `artifacts`; run it only when that
 deletion is genuinely required and permitted.
 
-## Branch state
+## Branch and release policy
 
-`dev` and `main` diverged after `8970224`:
-
-- `dev` @ `02de6e1`: contracts gitlink `53b16a5`, `.editorconfig`
-  normalization;
-- `main` @ `97d65ae`: contracts gitlink `a15d1fd`, corrected URL
-  `ras-hub-public` -> `ras-hub`, changed ecosystem positioning.
-
-The branches are not fast-forwards of each other. During a merge, verify the
-expected gitlink transition `53b16a5 -> a15d1fd` and preserve the initial dirty
-checkout; a gitlink conflict itself is not guaranteed.
+Feature work is integrated into `dev`; `main` receives reviewed release-ready
+changes. Before publishing, require a clean worktree, a green `dev` workflow,
+and a tag whose value exactly matches `version.json` (for example `v0.1.0`).
+The tag workflow publishes Linux and Windows packages only after both platform
+jobs pass.
 
 ## Code style and repository rules
 
@@ -218,7 +201,7 @@ RasStudio has no `AGENTS.md`. `.editorconfig` and local conventions apply:
 
 Rules differ when working in neighboring repositories:
 
-- RasHub: first read `/home/zmaxb/Nextcloud/prj/RasHub/AGENTS.md`;
+- RasHub: first read its root `AGENTS.md`;
 - BackgroundTasks: additionally read its nested `AGENTS.md`;
 - Contracts is a compatibility-sensitive shared public surface;
 - RasGate must not acquire resource-domain logic/parsing merely for Studio's
@@ -226,7 +209,7 @@ Rules differ when working in neighboring repositories:
 
 ## Extending the RasHub integration
 
-The following is a target proposal, not the existing dependency graph:
+The implemented dependency direction is:
 
 ```text
 Web UI -> Application use cases/ports
@@ -235,19 +218,12 @@ Infrastructure HTTP adapter -> RasHub.Contracts
 Web composition root -> Application + Infrastructure
 ```
 
-No concrete decision has been established in code yet. Before implementation,
-explicitly determine:
-
-1. Where and how the RasHub endpoint/profile is stored.
-2. How the user API key is protected on Windows/Linux.
-3. Who owns `HttpClient`, the auth handler, envelope/error mapping, and
-   resilience.
-4. Which contracts revision is canonical and how compatibility is verified.
-5. Which operations read shadow state and which explicitly initiate a live
-   refresh.
-6. How the UI represents an unknown remote-mutation outcome without retrying.
-7. Whether contracts should be a source submodule, versioned package, or
-   generated client.
+RasHub connection settings are stored through Nava.Settings; the user API key
+is protected through ASP.NET Core Data Protection. Infrastructure owns the
+shared HTTP transport, authentication header, envelope/error mapping, and
+contract DTO mapping. Reads distinguish persisted shadow state from explicit
+live refreshes, and remote mutations are not automatically retried after an
+unknown outcome. `RasHub.Contracts` remains a pinned source submodule.
 
 Do not start with a direct HTTP call from a `.razor` file: that would bind
 secrets, transport, and presentation into one layer.

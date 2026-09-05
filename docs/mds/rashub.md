@@ -1,7 +1,7 @@
 # RasHub: backend and public API
 
-Snapshot: official `main` @ `7e3cc15`, 2026-09-04, inspected through a fetched
-temporary checkout. Current public release version is `0.1.1`.
+Compatibility snapshot verified on 2026-09-05: official `main` @ `7e3cc15`.
+Current public release version is `0.1.1`.
 
 RasHub is the only correct server boundary for RasStudio. It stores Gate
 registrations, managed RAS endpoints and their Gate assignments, and
