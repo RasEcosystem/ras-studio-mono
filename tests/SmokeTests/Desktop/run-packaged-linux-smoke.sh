@@ -41,22 +41,18 @@ if [[ ! -x "$artifact_path" ]]; then
     exit 1
 fi
 
-application_command=("$artifact_path" --disable-gpu)
+(
+    cd "$RUN_DIRECTORY"
+    "$artifact_path" --appimage-extract >"$RUN_DIRECTORY/extract.log"
+)
 
-if [[ ! -r /dev/fuse ]]; then
-    (
-        cd "$RUN_DIRECTORY"
-        "$artifact_path" --appimage-extract >"$RUN_DIRECTORY/extract.log"
-    )
-
-    extracted_directory="$RUN_DIRECTORY/squashfs-root"
-    application_command=(
-        env APPDIR="$extracted_directory"
-        "$extracted_directory/AppRun"
-        --no-sandbox
-        --disable-gpu
-    )
-fi
+extracted_directory="$RUN_DIRECTORY/squashfs-root"
+application_command=(
+    env APPDIR="$extracted_directory"
+    "$extracted_directory/AppRun"
+    --no-sandbox
+    --disable-gpu
+)
 
 display_command=()
 if [[ -z "${DISPLAY:-}" ]]; then
