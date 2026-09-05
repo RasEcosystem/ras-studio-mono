@@ -112,6 +112,7 @@ env \
         -- \
         -unpackeddotnet \
         --manifest="$(basename "$SMOKE_MANIFEST_PATH")" \
+        --no-sandbox \
         --disable-gpu \
         >"$LOG_PATH" 2>&1 &
 
