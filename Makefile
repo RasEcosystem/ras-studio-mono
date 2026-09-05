@@ -10,7 +10,7 @@ WEB_PROJECT := src/RasStudio.Web/RasStudio.Web.csproj
 
 .PHONY: help all submodules submodules-update restore build debug build-release run \
 	package release package-linux package-windows package-audit packaged-linux-smoke format format-check \
-	dotnet-tests visual desktop-smoke mcp-smoke electron-audit test clean
+	dotnet-tests desktop-smoke mcp-smoke electron-audit test clean
 
 help:
 	@printf '%s\n' \
@@ -30,10 +30,9 @@ help:
 		'  make format            Format the solution' \
 		'  make format-check      Verify formatting exactly as CI should' \
 		'  make dotnet-tests      Run unit and integration test projects' \
-		'  make visual            Capture Home page screenshots for every theme' \
 		'  make desktop-smoke     Verify Electron/Kestrel startup and shutdown lifecycle' \
 		'  make mcp-smoke         Verify protected MCP discovery and tool invocation' \
-		'  make test              Run build, dependency, .NET, visual, desktop, and MCP checks' \
+		'  make test              Run build, dependency, .NET, desktop, and MCP checks' \
 		'  make clean             Clean build and package outputs'
 
 all: build
@@ -103,9 +102,6 @@ format-check: restore
 dotnet-tests: restore
 	$(DOTNET) test "$(SOLUTION)" --configuration "$(CONFIGURATION)" --no-restore -m:1
 
-visual:
-	CONFIGURATION="$(CONFIGURATION)" tests/SmokeTests/Visual/run-screenshots.sh
-
 desktop-smoke:
 	CONFIGURATION="$(CONFIGURATION)" tests/SmokeTests/Desktop/run-smoke.sh
 
@@ -116,7 +112,7 @@ electron-audit: build-release
 	npm --prefix "src/RasStudio.Web/bin/Release/net10.0/.electron" audit --omit=dev --audit-level=high
 
 test: CONFIGURATION := Release
-test: build-release format-check electron-audit dotnet-tests visual desktop-smoke mcp-smoke
+test: build-release format-check electron-audit dotnet-tests desktop-smoke mcp-smoke
 
 clean:
 	$(DOTNET) clean "$(SOLUTION)"

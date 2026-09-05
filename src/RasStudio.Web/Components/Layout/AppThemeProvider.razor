@@ -1,7 +1,6 @@
 @using RasStudio.Web.Infrastructure.Themes.Providers
 @implements IAsyncDisposable
 @inject ISettingsProvider<ApplicationSettings> ApplicationSettingsProvider
-@inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="@_isDarkMode"/>
@@ -50,14 +49,6 @@
 
     private void ApplyTheme(AppTheme theme)
     {
-        if (Enum.TryParse<AppTheme>(
-                Configuration["RasStudio:ThemeOverride"],
-                true,
-                out var previewTheme))
-        {
-            theme = previewTheme;
-        }
-
         var definition = ThemeProvider.GetTheme(theme);
         var lightDefinition = ThemeProvider.GetTheme(AppTheme.Light);
         var darkDefinition = theme == AppTheme.Slate

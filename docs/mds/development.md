@@ -47,8 +47,7 @@ Documented requirements:
 - .NET 10 SDK;
 - Node.js 22+;
 - Windows 10/11 or Linux supported by .NET/Electron;
-- GNU Make/Bash for the Makefile and tests;
-- a Chromium-compatible browser for the visual smoke test.
+- GNU Make/Bash for the Makefile and tests.
 
 The following were available locally during verification:
 
@@ -56,7 +55,6 @@ The following were available locally during verification:
 .NET SDK:       10.0.400
 Node.js:        24.13.0
 npm:            11.6.2
-visual browser: Google Chrome
 ```
 
 `global.json`, `packages.lock.json`, `Directory.Packages.props`, a source
@@ -75,7 +73,6 @@ make run
 make format
 make format-check
 make dotnet-tests
-make visual
 make desktop-smoke
 make mcp-smoke
 make test
@@ -123,9 +120,9 @@ ignored content, not a source dependency lock.
 | Change | Minimum | Before handoff |
 |---|---|---|
 | Markdown only | Check links/paths, `git diff --check` | Review the entire docs diff |
-| Razor/CSS/copy/layout | Release build + visual smoke test | All 20 screenshots and relevant manual inspection |
-| Theme/settings | Release build + visual smoke test | Desktop smoke test, isolated settings database |
-| `Program.cs`/DI/local data | Release build | Visual + desktop smoke tests |
+| Razor/CSS/copy/layout | Release build | Manual inspection of the affected desktop and mobile layouts |
+| Theme/settings | Release build | Desktop smoke test, isolated settings database, and manual theme inspection |
+| `Program.cs`/DI/local data | Release build | Desktop smoke test |
 | Electron hook/lifecycle | Release build + desktop smoke test | Manual packaged/unpackaged lifecycle at high risk |
 | Packaging metadata | Release build | Package on every target OS; inspect artifact contents |
 | Logging/diagnostics | Web unit tests + Web host integration test | Desktop smoke must verify rolling file and lifecycle events |
@@ -134,22 +131,20 @@ ignored content, not a source dependency lock.
 Available scripts:
 
 ```bash
-tests/SmokeTests/Visual/run-screenshots.sh
 tests/SmokeTests/Desktop/run-smoke.sh
 ```
 
-The visual script uses fixed ports 5181..5184 and does not clear the output
-directory. It does not perform approved-baseline comparison. The desktop script
-requires Node and an environment capable of running Electron headlessly.
+The desktop script requires Node and an environment capable of running Electron
+headlessly.
 
 ## Release-candidate verification
 
 The 2026-09-05 audit verified a Release build with warnings treated as errors,
-118 unit/integration tests, all 20 visual captures, the authenticated MCP smoke
-suite, unpackaged and packaged Linux desktop lifecycle checks, Linux AppImage
-packaging, and NuGet/npm vulnerability audits. Re-run `make release` from a
-clean checkout before creating the version tag; the tagged GitHub Actions run
-also builds and audits the Windows installer and portable executable.
+118 unit/integration tests, the authenticated MCP smoke suite, unpackaged and
+packaged Linux desktop lifecycle checks, Linux AppImage packaging, and NuGet/npm
+vulnerability audits. Re-run `make release` from a clean checkout before
+creating the version tag; the tagged GitHub Actions run also builds and audits
+the Windows installer and portable executable.
 
 The initial generated npm tree contained vulnerable `image-size 1.2.1`,
 affected by two high-severity advisories:

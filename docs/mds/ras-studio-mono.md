@@ -39,8 +39,8 @@ describes the current `dev` implementation and RasHub `0.1.1` contract.
 - An Application events page with warning/error counters, search, filtering,
   exception details, trace IDs, and polling of the current-process buffer.
 - Linux AppImage and Windows NSIS/portable packaging configuration.
-- Unit and Web integration tests, visual and MCP smoke tests, and real headless
-  Electron lifecycle smoke tests for unpackaged and packaged Linux builds.
+- Unit and Web integration tests, MCP smoke tests, and real headless Electron
+  lifecycle smoke tests for unpackaged and packaged Linux builds.
 - GitHub Actions verification on Linux, Windows packaging verification, and
   automatic publication of tagged Linux/Windows packages with SHA-256 checksums.
 
@@ -183,7 +183,6 @@ Configuration keys in use:
 | `Desktop:DisableElectron` | Web-only diagnostic mode |
 | `Desktop:DiagnosticPort` | Loopback port for diagnostic mode |
 | `Desktop:SmokeTest` | Automatic window closure |
-| `RasStudio:ThemeOverride` | Forced theme for visual capture |
 | `RasStudio:AppDataPath` | Configuration-based local-data override |
 | `Mcp:AccessToken` | Optional fixed bearer token for the loopback MCP endpoint; otherwise a random per-process token is generated |
 | `FileLogging:RetainedFileCountLimit` | Rolling log retention, validated to 1..365 |
@@ -274,7 +273,6 @@ tests/UnitTests/RasStudio.Web.UnitTests
 tests/IntegrationTests/RasStudio.Web.IntegrationTests
 tests/SmokeTests/RasStudio.McpSmoke
 tests/SmokeTests/Desktop
-tests/SmokeTests/Visual
 ```
 
 `make test` runs these steps in sequence:
@@ -283,9 +281,8 @@ tests/SmokeTests/Visual
 2. formatting verification;
 3. generated Electron dependency audit;
 4. .NET unit and Web host integration tests;
-5. `tests/SmokeTests/Visual/run-screenshots.sh`;
-6. `tests/SmokeTests/Desktop/run-smoke.sh`;
-7. `tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh`.
+5. `tests/SmokeTests/Desktop/run-smoke.sh`;
+6. `tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh`.
 
 `make release` adds Electron and packaged dependency audits, creates the Linux
 AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
@@ -298,12 +295,6 @@ AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
 desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
 developer's already-running production instance cannot make CI nondeterministic;
 the production manifest is still asserted to keep `singleInstance=true`.
-
-The visual smoke test captures 20 images: Home in four themes at desktop/mobile
-sizes and all primary routes, including Infobases, Application events,
-Assistant, and Settings, in Carbon. It checks security headers and a difference
-between Light and System-dark, but it does not compare against approved
-baselines. It is therefore a smoke test, not a pixel-regression suite.
 
 The desktop smoke test checks the generated Electron config, security hook,
 PackageId, loopback console output, Socket.IO connection, creation of the
@@ -319,10 +310,10 @@ map of the current code.
 
 | Task | Start with | Usually affects |
 |---|---|---|
-| New route/page | `Components/Pages`, `Layout/NavMenu.razor` | Page component, navigation, visual route list; `Routes.razor` is needed only when changing router/layout/not-found policy |
-| Shared layout/state | `AppPageShell`, `AppEmptyState`, `MainLayout` | Scoped CSS and visual smoke tests |
-| Theme | `Application/Settings`, `AppThemeProvider`, `Infrastructure/Themes` | Settings UI, system-theme JavaScript, four-theme screenshots |
-| Startup/local data | `Program.cs` | Nava DI, configuration, desktop and visual tests |
+| New route/page | `Components/Pages`, `Layout/NavMenu.razor` | Page component and navigation; `Routes.razor` is needed only when changing router/layout/not-found policy |
+| Shared layout/state | `AppPageShell`, `AppEmptyState`, `MainLayout` | Scoped CSS and affected page layouts |
+| Theme | `Application/Settings`, `AppThemeProvider`, `Infrastructure/Themes` | Settings UI and system-theme JavaScript |
+| Startup/local data | `Program.cs` | Nava DI, configuration, and desktop tests |
 | Electron security/lifecycle | `.electron/custom_main.js`, `Program.cs` | Desktop smoke test and package output |
 | Packaging | Web `.csproj`, `electron-builder.json`, `PublishProfiles` | Host-specific package build |
 | RasHub integration | Start with [RasHub context](rashub.md) and the contracts revision | Application port/model, Infrastructure client, Web DI/UI, API/serialization tests |

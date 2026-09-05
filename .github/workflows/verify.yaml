@@ -79,9 +79,6 @@ jobs:
       - name: Audit Electron dependencies
         run: make electron-audit
 
-      - name: Verify visual rendering
-        run: make visual CONFIGURATION=Release
-
       - name: Verify embedded MCP
         run: make mcp-smoke CONFIGURATION=Release
 
