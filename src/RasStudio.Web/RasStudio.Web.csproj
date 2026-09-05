@@ -14,8 +14,13 @@
         <Product>RasStudio Mono</Product>
         <Description>Desktop administration console for 1C:Enterprise environments</Description>
         <Company>Ras Ecosystem</Company>
-        <Copyright>Copyright © Ras Ecosystem</Copyright>
+        <Authors>Max Braun</Authors>
+        <Copyright>Copyright © 2026 Max Braun</Copyright>
         <License>MIT</License>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <ProjectUrl>https://github.com/RasEcosystem/ras-studio-mono</ProjectUrl>
+        <RepositoryUrl>https://github.com/RasEcosystem/ras-studio-mono.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
         <ElectronPackageId>com.rasecosystem.rasstudio-mono</ElectronPackageId>
         <ElectronSingleInstance>true</ElectronSingleInstance>
         <ElectronVersion>43.4.0</ElectronVersion>
@@ -37,6 +42,10 @@
         <None Update="Assets\rasstudio.ico" CopyToOutputDirectory="PreserveNewest"/>
         <None Update="Assets\rasstudio.png" CopyToOutputDirectory="PreserveNewest"/>
         <None Update="Assets\rasstudio-window.png" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="..\..\LICENSE"
+              Link="LICENSE"
+              CopyToOutputDirectory="PreserveNewest"
+              CopyToPublishDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>

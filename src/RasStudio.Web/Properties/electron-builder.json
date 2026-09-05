@@ -33,9 +33,13 @@
         "icon": "bin/Assets/rasstudio.ico"
     },
     "nsis": {
+        "artifactName": "RasStudio-Mono-${version}-windows-${arch}-setup.${ext}",
         "oneClick": false,
         "allowToChangeInstallationDirectory": true,
         "createDesktopShortcut": true,
         "createStartMenuShortcut": true
+    },
+    "portable": {
+        "artifactName": "RasStudio-Mono-${version}-windows-${arch}-portable.${ext}"
     }
 }

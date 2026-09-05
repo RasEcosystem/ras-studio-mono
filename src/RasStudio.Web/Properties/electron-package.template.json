@@ -4,10 +4,10 @@
     "description": "$(Description)",
     "version": "$(Version)",
     "main": "main.js",
-    "desktopName": "$(ElectronPackageId).desktop",
-    "author": {
-        "name": "$(Company)"
-    },
+  "desktopName": "$(ElectronPackageId).desktop",
+  "author": {
+    "name": "$(Authors)"
+  },
     "license": "$(License)",
     "executable": "$(TargetName)",
     "singleInstance": $(ElectronSingleInstance),

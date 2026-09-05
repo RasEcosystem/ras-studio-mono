@@ -8,7 +8,7 @@ public sealed class ApplicationSettings
 {
     public AppTheme Theme { get; set; }
 
-    public string InferenceServerUrl { get; set; } = "http://192.168.253.25:11434";
+    public string InferenceServerUrl { get; set; } = "http://127.0.0.1:11434";
 
     public string InferenceModel { get; set; } = "Qwen3:latest";
 }
