@@ -14,6 +14,42 @@ h1[tabindex="-1"]:focus {
     padding: 1.5rem;
 }
 
+.app-table-progress {
+    margin-bottom: .5rem;
+    opacity: 0;
+    transition: opacity 120ms ease-in-out;
+}
+
+.app-table-progress--visible {
+    opacity: 1;
+}
+
+.cluster-editor-actions {
+    border-top: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+    padding: .75rem 1.5rem 1rem;
+}
+
+@media (max-width: 600px) {
+    .cluster-editor-dialog {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        overflow: hidden;
+    }
+
+    .cluster-editor-content {
+        padding: .5rem 1rem 1rem;
+    }
+
+    .cluster-editor-actions {
+        padding: .75rem 1rem;
+    }
+}
+
 .app-state {
     display: flex;
     flex-direction: column;

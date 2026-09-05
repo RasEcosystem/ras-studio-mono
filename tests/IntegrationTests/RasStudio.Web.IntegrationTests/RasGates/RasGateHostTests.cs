@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using RasStudio.Application.Clusters;
+using RasStudio.Application.Infobases;
 using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasGates;
 using RasStudio.Application.RasHub;
@@ -25,6 +27,8 @@ public sealed class RasGateHostTests(
             .GetRequiredService<IRasEndpointService>();
         var rasClusterService = scope.ServiceProvider
             .GetRequiredService<IRasClusterService>();
+        var rasInfobaseService = scope.ServiceProvider
+            .GetRequiredService<IRasInfobaseService>();
         var rasHubInfoService = scope.ServiceProvider
             .GetRequiredService<IRasHubInfoService>();
 
@@ -32,12 +36,14 @@ public sealed class RasGateHostTests(
         Assert.NotNull(rasGateService);
         Assert.NotNull(rasEndpointService);
         Assert.NotNull(rasClusterService);
+        Assert.NotNull(rasInfobaseService);
         Assert.NotNull(rasHubInfoService);
     }
 
     [Theory]
     [InlineData("/ras-endpoints")]
     [InlineData("/clusters")]
+    [InlineData("/infobases")]
     public async Task UnconfiguredResourcePagesDirectUserToSettings(string path)
     {
         using var httpClient = factory.CreateClient();
@@ -159,6 +165,158 @@ public sealed class RasGateHostTests(
     }
 
     [Fact]
+    public async Task ConfiguredClustersPageLoadsShadowsFromAllActiveEndpointsByDefault()
+    {
+        var gateId = Guid.Parse("f3648378-d27b-482b-bb49-61f6149d3574");
+        var first = CreateEndpoint(gateId);
+        var second = CreateEndpoint(
+            gateId,
+            Guid.Parse("45202703-e5d7-4b9f-9029-7cc605eed5a7"),
+            "Regional RAS",
+            "regional-ras.example.test");
+        var clusterService = new StubRasClusterService();
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IRasEndpointService>();
+                services.RemoveAll<IRasClusterService>();
+                services.RemoveAll<IRasHubConnectionSettings>();
+                services.AddSingleton<IRasEndpointService>(
+                    new StubRasEndpointService(2, [first, second]));
+                services.AddSingleton<IRasClusterService>(clusterService);
+                services.AddSingleton<IRasHubConnectionSettings>(
+                    new StubRasHubConnectionSettings());
+            }));
+        using var httpClient = configuredFactory.CreateClient();
+        using var response = await httpClient.GetAsync(
+            "/clusters",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("Cluster One", html, StringComparison.Ordinal);
+        Assert.True(new HashSet<Guid> { first.Id, second.Id }
+            .SetEquals(clusterService.RequestedPagedEndpointIds));
+        Assert.Empty(clusterService.RequestedAllEndpointIds);
+        Assert.All(
+            clusterService.RequestedPageRequests,
+            request => Assert.Equal((1, 10), (request.Page, request.PageSize)));
+    }
+
+    [Fact]
+    public async Task ConfiguredInfobasesPageLoadsSelectedClusterShadow()
+    {
+        var gateId = Guid.Parse("f3648378-d27b-482b-bb49-61f6149d3574");
+        var endpoint = CreateEndpoint(gateId);
+        var clusterId = Guid.Parse("5c2d3c64-b7bb-4458-a0eb-29bfec638767");
+        var infobaseService = new StubRasInfobaseService();
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IRasEndpointService>();
+                services.RemoveAll<IRasClusterService>();
+                services.RemoveAll<IRasInfobaseService>();
+                services.RemoveAll<IRasHubConnectionSettings>();
+                services.AddSingleton<IRasEndpointService>(
+                    new StubRasEndpointService(1, [endpoint]));
+                services.AddSingleton<IRasClusterService>(new StubRasClusterService());
+                services.AddSingleton<IRasInfobaseService>(infobaseService);
+                services.AddSingleton<IRasHubConnectionSettings>(
+                    new StubRasHubConnectionSettings());
+            }));
+        using var httpClient = configuredFactory.CreateClient();
+        using var response = await httpClient.GetAsync(
+            $"/infobases?rasEndpointId={endpoint.Id:D}&clusterId={clusterId:D}",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("Accounting", html, StringComparison.Ordinal);
+        Assert.Contains("Sync selected cluster", html, StringComparison.Ordinal);
+        Assert.Contains("With credentials", html, StringComparison.Ordinal);
+        Assert.Equal((endpoint.Id, clusterId), infobaseService.RequestedScope);
+    }
+
+    [Fact]
+    public async Task ConfiguredInfobasesPageLoadsShadowsFromAllActiveEndpointsByDefault()
+    {
+        var gateId = Guid.Parse("f3648378-d27b-482b-bb49-61f6149d3574");
+        var first = CreateEndpoint(gateId);
+        var second = CreateEndpoint(
+            gateId,
+            Guid.Parse("45202703-e5d7-4b9f-9029-7cc605eed5a7"),
+            "Regional RAS",
+            "regional-ras.example.test");
+        var clusterService = new StubRasClusterService();
+        var infobaseService = new StubRasInfobaseService();
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IRasEndpointService>();
+                services.RemoveAll<IRasClusterService>();
+                services.RemoveAll<IRasInfobaseService>();
+                services.RemoveAll<IRasHubConnectionSettings>();
+                services.AddSingleton<IRasEndpointService>(
+                    new StubRasEndpointService(2, [first, second]));
+                services.AddSingleton<IRasClusterService>(clusterService);
+                services.AddSingleton<IRasInfobaseService>(infobaseService);
+                services.AddSingleton<IRasHubConnectionSettings>(
+                    new StubRasHubConnectionSettings());
+            }));
+        using var httpClient = configuredFactory.CreateClient();
+        using var response = await httpClient.GetAsync(
+            "/infobases",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("Accounting", html, StringComparison.Ordinal);
+        Assert.True(new HashSet<Guid> { first.Id, second.Id }.SetEquals(
+            infobaseService.RequestedPagedScopes.Select(scope => scope.RasEndpointId)));
+        Assert.Empty(infobaseService.RequestedAllScopes);
+        Assert.All(
+            infobaseService.RequestedPageRequests,
+            request => Assert.Equal((1, 10), (request.Page, request.PageSize)));
+    }
+
+    [Fact]
+    public async Task ConfiguredInfobasesPageSearchesAcrossRasHub()
+    {
+        var gateId = Guid.Parse("f3648378-d27b-482b-bb49-61f6149d3574");
+        var endpoint = CreateEndpoint(gateId);
+        var infobaseService = new StubRasInfobaseService();
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IRasEndpointService>();
+                services.RemoveAll<IRasClusterService>();
+                services.RemoveAll<IRasInfobaseService>();
+                services.RemoveAll<IRasHubConnectionSettings>();
+                services.AddSingleton<IRasEndpointService>(
+                    new StubRasEndpointService(1, [endpoint]));
+                services.AddSingleton<IRasClusterService>(new StubRasClusterService());
+                services.AddSingleton<IRasInfobaseService>(infobaseService);
+                services.AddSingleton<IRasHubConnectionSettings>(
+                    new StubRasHubConnectionSettings());
+            }));
+        using var httpClient = configuredFactory.CreateClient();
+        using var response = await httpClient.GetAsync(
+            "/infobases?q=Accounting",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("Primary accounting database", html, StringComparison.Ordinal);
+        Assert.Equal("Accounting", infobaseService.RequestedSearch?.Query);
+        Assert.Null(infobaseService.RequestedSearch?.RasEndpointId);
+        Assert.Null(infobaseService.RequestedSearch?.ClusterId);
+    }
+
+    [Fact]
     public async Task ClustersPage_when_endpoint_load_fails_displays_error_and_retry()
     {
         using var configuredFactory = factory.WithWebHostBuilder(builder =>
@@ -202,13 +360,17 @@ public sealed class RasGateHostTests(
             DateTime.UtcNow);
     }
 
-    private static RasEndpoint CreateEndpoint(Guid gateId)
+    private static RasEndpoint CreateEndpoint(
+        Guid gateId,
+        Guid? endpointId = null,
+        string name = "Production RAS",
+        string host = "ras.example.test")
     {
         return new RasEndpoint(
-            Guid.Parse("a42195a1-b54d-4593-b56b-b4fe2d1da355"),
+            endpointId ?? Guid.Parse("a42195a1-b54d-4593-b56b-b4fe2d1da355"),
             gateId,
-            "Production RAS",
-            "ras.example.test",
+            name,
+            host,
             1545,
             true,
             DateTime.UtcNow,
@@ -299,6 +461,12 @@ public sealed class RasGateHostTests(
     {
         public Guid? RequestedEndpointId { get; private set; }
 
+        public ConcurrentBag<Guid> RequestedPagedEndpointIds { get; } = [];
+
+        public ConcurrentBag<(int Page, int PageSize)> RequestedPageRequests { get; } = [];
+
+        public ConcurrentBag<Guid> RequestedAllEndpointIds { get; } = [];
+
         public Task<RasClusterPage> GetShadowPageAsync(
             Guid rasEndpointId,
             int page,
@@ -306,13 +474,132 @@ public sealed class RasGateHostTests(
             CancellationToken cancellationToken = default)
         {
             RequestedEndpointId = rasEndpointId;
+            RequestedPagedEndpointIds.Add(rasEndpointId);
+            RequestedPageRequests.Add((page, pageSize));
             return Task.FromResult(new RasClusterPage(
+                [CreateCluster()],
+                1,
+                page,
+                pageSize,
+                1));
+        }
+
+        public Task<IReadOnlyList<RasCluster>> GetShadowAllAsync(
+            Guid rasEndpointId,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedAllEndpointIds.Add(rasEndpointId);
+            return Task.FromResult<IReadOnlyList<RasCluster>>([CreateCluster()]);
+        }
+
+        public Task<RasClusterSearchPage> SearchShadowPageAsync(
+            string query,
+            Guid? rasEndpointId,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            var endpointId = rasEndpointId ??
+                             Guid.Parse("a42195a1-b54d-4593-b56b-b4fe2d1da355");
+            return Task.FromResult(new RasClusterSearchPage(
+                [new RasClusterSearchResult(endpointId, "Production RAS", CreateCluster())],
+                1,
+                page,
+                pageSize,
+                1));
+        }
+
+        public Task<RasCluster> GetShadowAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CreateCluster());
+        }
+
+        public Task<RasClusterShadowRefresh> RefreshShadowAsync(
+            Guid rasEndpointId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<RasCluster> CreateAsync(
+            Guid rasEndpointId,
+            CreateRasCluster command,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<RasCluster> UpdateAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            UpdateRasCluster command,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<RasCluster> RemoveAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            RasClusterCredentials? credentials = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        private static RasCluster CreateCluster()
+        {
+            return new RasCluster
+            {
+                Id = Guid.Parse("5c2d3c64-b7bb-4458-a0eb-29bfec638767"),
+                Name = "Cluster One",
+                Host = "cluster.example.test",
+                Port = 1541,
+                ExpirationTimeoutSeconds = 0,
+                LifetimeLimitSeconds = 0,
+                MaxMemorySizeKb = 0,
+                MaxMemoryTimeLimitSeconds = 0,
+                SecurityLevel = 0,
+                SessionFaultToleranceLevel = 0,
+                LoadBalancingMode = RasClusterLoadBalancingMode.Performance,
+                ErrorsCountThresholdPercent = 0,
+                KillProblemProcesses = false,
+                ObservedAt = DateTime.UtcNow
+            };
+        }
+    }
+
+    private sealed class StubRasInfobaseService : IRasInfobaseService
+    {
+        public (Guid RasEndpointId, Guid ClusterId)? RequestedScope { get; private set; }
+
+        public ConcurrentBag<(Guid RasEndpointId, Guid ClusterId)> RequestedPagedScopes { get; } = [];
+
+        public ConcurrentBag<(int Page, int PageSize)> RequestedPageRequests { get; } = [];
+
+        public ConcurrentBag<(Guid RasEndpointId, Guid ClusterId)> RequestedAllScopes { get; } = [];
+
+        public (string Query, Guid? RasEndpointId, Guid? ClusterId)? RequestedSearch { get; private set; }
+
+        public Task<RasInfobasePage> GetShadowPageAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedScope = (rasEndpointId, clusterId);
+            RequestedPagedScopes.Add((rasEndpointId, clusterId));
+            RequestedPageRequests.Add((page, pageSize));
+            return Task.FromResult(new RasInfobasePage(
                 [
-                    new RasCluster(
-                        Guid.Parse("5c2d3c64-b7bb-4458-a0eb-29bfec638767"),
-                        "Cluster One",
-                        "cluster.example.test",
-                        1541,
+                    new RasInfobase(
+                        Guid.Parse("84e6cb2f-7b48-4dad-ae45-81ea22c7b42a"),
+                        "Accounting",
+                        "Primary accounting database",
                         DateTime.UtcNow)
                 ],
                 1,
@@ -321,11 +608,65 @@ public sealed class RasGateHostTests(
                 1));
         }
 
-        public Task<RasClusterShadowRefresh> RefreshShadowAsync(
+        public Task<RasInfobaseSearchPage> SearchShadowPageAsync(
+            string query,
+            Guid? rasEndpointId,
+            Guid? clusterId,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedSearch = (query, rasEndpointId, clusterId);
+            return Task.FromResult(new RasInfobaseSearchPage(
+                [
+                    new RasInfobaseSearchResult(
+                        Guid.Parse("a42195a1-b54d-4593-b56b-b4fe2d1da355"),
+                        "Production RAS",
+                        Guid.Parse("5c2d3c64-b7bb-4458-a0eb-29bfec638767"),
+                        "Cluster One",
+                        CreateInfobase())
+                ],
+                1,
+                page,
+                pageSize,
+                1));
+        }
+
+        public Task<IReadOnlyList<RasInfobase>> GetShadowAllAsync(
             Guid rasEndpointId,
+            Guid clusterId,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedAllScopes.Add((rasEndpointId, clusterId));
+            return Task.FromResult<IReadOnlyList<RasInfobase>>([CreateInfobase()]);
+        }
+
+        public Task<RasInfobaseShadowRefresh> RefreshShadowAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            RasInfobaseCredentials? credentials = null,
             CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
+        }
+
+        public Task<RasInfobase> RefreshAsync(
+            Guid rasEndpointId,
+            Guid clusterId,
+            Guid infobaseId,
+            RasInfobaseCredentials? credentials = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        private static RasInfobase CreateInfobase()
+        {
+            return new RasInfobase(
+                Guid.Parse("84e6cb2f-7b48-4dad-ae45-81ea22c7b42a"),
+                "Accounting",
+                "Primary accounting database",
+                DateTime.UtcNow);
         }
     }
 

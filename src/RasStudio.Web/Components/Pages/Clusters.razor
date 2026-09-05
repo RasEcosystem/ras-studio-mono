@@ -3,6 +3,7 @@
 @inject IRasClusterService RasClusterService
 @inject IRasEndpointService RasEndpointService
 @inject IRasHubConnectionSettings ConnectionSettings
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<Clusters> Logger
 @inject NavigationManager Navigation
@@ -11,16 +12,25 @@
 
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Clusters"
-              Subtitle="Inspect cluster shadow owned by a RAS endpoint and refresh it through the assigned RasGate"
+              Subtitle="Manage clusters through RasHub"
               Icon="@Icons.Material.Filled.Storage">
     <HeaderActions>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Outlined.Sync"
-                   Disabled="@(_selectedEndpointId is null || _loading || _refreshing)"
-                   OnClick="RefreshShadowAsync">
-            @(_refreshing ? "Refreshing…" : "Refresh from RAS")
-        </MudButton>
+        <MudStack Row Wrap="Wrap.Wrap" Spacing="2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Add"
+                       Disabled="@(_endpoints.Count == 0 || IsBusy)"
+                       OnClick="AddAsync">
+                Add cluster
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Sync"
+                       Disabled="@(_endpoints.Count == 0 || IsBusy)"
+                       OnClick="RefreshShadowAsync">
+                @(_refreshing ? "Refreshing all…" : "Refresh all from RAS")
+            </MudButton>
+        </MudStack>
     </HeaderActions>
     <ChildContent>
         @if (!ConnectionSettings.Current.IsConfigured)
@@ -78,35 +88,54 @@
         {
             <MudStack Spacing="3">
                 <MudPaper Class="app-card" Elevation="1">
-                    <MudStack Row
-                              Wrap="Wrap.Wrap"
-                              AlignItems="AlignItems.Center"
-                              Justify="Justify.SpaceBetween"
-                              Spacing="2">
-                        <MudSelect T="Guid?"
-                                   Label="RAS endpoint"
-                                   Value="@_selectedEndpointId"
-                                   ValueChanged="EndpointChangedAsync"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   Disabled="@(_loading || _refreshing || _loadingEndpoints)"
-                                   Style="min-width: 280px;">
-                            @foreach (var endpoint in _endpoints)
-                            {
-                                <MudSelectItem T="Guid?" Value="@((Guid?)endpoint.Id)">
-                                    @endpoint.Name · @FormatEndpointAddress(endpoint)
-                                </MudSelectItem>
-                            }
-                        </MudSelect>
-
-                        <MudTooltip Text="Reload persisted cluster shadow">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
-                                           Color="Color.Primary"
-                                           Disabled="@(_selectedEndpointId is null || _loading || _refreshing)"
-                                           OnClick="LoadPageAsync"
-                                           aria-label="Reload cluster shadow"/>
-                        </MudTooltip>
-                    </MudStack>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="5">
+                            <MudSelect T="Guid?"
+                                       Label="RAS endpoint filter"
+                                       Value="@_selectedEndpointId"
+                                       ValueChanged="EndpointChangedAsync"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Clearable
+                                       Disabled="@(IsBusy || _loadingEndpoints)">
+                                @foreach (var endpoint in _endpoints)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)endpoint.Id)">
+                                        @endpoint.Name · @FormatEndpointAddress(endpoint)
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="7">
+                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTextField T="string"
+                                              @bind-Value="_query"
+                                              Label="Search"
+                                              Placeholder="Name, manager host"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              MaxLength="200"
+                                              Immediate
+                                              DebounceInterval="350"
+                                              OnDebounceIntervalElapsed="SearchChangedAsync"
+                                              Clearable
+                                              ClearIcon="@Icons.Material.Outlined.Close"
+                                              OnClearButtonClick="ClearSearchAsync"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Outlined.Search"
+                                              AdornmentAriaLabel="Search clusters"
+                                              Disabled="@IsSearchDisabled"
+                                              Class="flex-grow-1"/>
+                                <MudTooltip Text="Reload persisted cluster shadow">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                                                   Color="Color.Primary"
+                                                   Disabled="@IsBusy"
+                                                   OnClick="ReloadDataAsync"
+                                                   aria-label="Reload cluster shadow"/>
+                                </MudTooltip>
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
                 </MudPaper>
 
                 @if (_loadError is not null)
@@ -125,48 +154,94 @@
                 }
 
                 <MudPaper Class="app-card clusters-card" Elevation="1">
-                    @if (_loading || _loadingEndpoints)
-                    {
-                        <MudProgressLinear Indeterminate Color="Color.Primary" Class="mb-2"/>
-                    }
+                    <MudProgressLinear Indeterminate="@(_loading || _loadingEndpoints)"
+                                       Color="Color.Primary"
+                                       Class="@ProgressClass(_loading || _loadingEndpoints)"/>
 
-                    <MudTable T="RasCluster"
-                              Items="@_page.Items"
+                    <MudTable T="ClusterRow"
+                              Items="@_items"
                               Hover
                               Elevation="0"
                               Breakpoint="Breakpoint.Md"
                               RowsPerPage="@int.MaxValue"
-                              Loading="@_loading">
+                              aria-busy="@_loading">
                         <HeaderContent>
                             <MudTh>Cluster</MudTh>
+                            <MudTh>RAS endpoint</MudTh>
                             <MudTh>Manager address</MudTh>
+                            <MudTh>Load balancing</MudTh>
                             <MudTh>Observed</MudTh>
+                            <MudTh Class="text-right">Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Cluster">
-                                <MudText Typo="Typo.body2">@context.Name</MudText>
+                                <MudText Typo="Typo.body2">@context.Cluster.Name</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @context.Id.ToString("D")
+                                    @context.Cluster.Id.ToString("D")
                                 </MudText>
                             </MudTd>
+                            <MudTd DataLabel="RAS endpoint">
+                                <MudText Typo="Typo.body2">@context.RasEndpointName</MudText>
+                            </MudTd>
                             <MudTd DataLabel="Manager address">
-                                <MudText Typo="Typo.body2">@FormatClusterAddress(context)</MudText>
+                                <MudText Typo="Typo.body2">@FormatClusterAddress(context.Cluster)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Load balancing">
+                                <MudText Typo="Typo.body2">@context.Cluster.LoadBalancingMode</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Security level @context.Cluster.SecurityLevel
+                                </MudText>
                             </MudTd>
                             <MudTd DataLabel="Observed">
-                                <MudText Typo="Typo.body2">@FormatTime(context.ObservedAt)</MudText>
+                                <MudText Typo="Typo.body2">@FormatTime(context.Cluster.ObservedAt)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Actions" Class="text-right">
+                                @if (IsBusyCluster(context))
+                                {
+                                    <MudProgressCircular Indeterminate Size="Size.Small" Color="Color.Primary"/>
+                                }
+                                else
+                                {
+                                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                             Size="Size.Small"
+                                             Dense
+                                             AnchorOrigin="Origin.BottomRight"
+                                             TransformOrigin="Origin.TopRight"
+                                             Disabled="@IsBusy"
+                                             AriaLabel="@($"Actions for {context.Cluster.Name}")">
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.TableView"
+                                                     Href="@InfobasesUrl(context)">
+                                            View infobases
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Info"
+                                                     OnClick="@(() => ShowDetailsAsync(context.Cluster))">
+                                            Details
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit"
+                                                     OnClick="@(() => EditAsync(context))">
+                                            Edit
+                                        </MudMenuItem>
+                                        <MudDivider/>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.DeleteOutline"
+                                                     IconColor="Color.Error"
+                                                     OnClick="@(() => RemoveAsync(context))">
+                                            Remove
+                                        </MudMenuItem>
+                                    </MudMenu>
+                                }
                             </MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
-                            <AppEmptyState Title="No clusters in the shadow"
-                                           Description="Refresh from RAS to rebuild shadow data after registering or changing this endpoint."
+                            <AppEmptyState Title="No clusters found"
+                                           Description="Change the filters or refresh all active RAS endpoints."
                                            Icon="@Icons.Material.Filled.Storage">
                                 <Actions>
                                     <MudButton Variant="Variant.Outlined"
                                                Color="Color.Primary"
                                                StartIcon="@Icons.Material.Outlined.Sync"
-                                               Disabled="@(_selectedEndpointId is null || _refreshing)"
+                                               Disabled="@(_endpoints.Count == 0 || IsBusy)"
                                                OnClick="RefreshShadowAsync">
-                                        Refresh from RAS
+                                        Refresh all from RAS
                                     </MudButton>
                                 </Actions>
                             </AppEmptyState>
@@ -181,7 +256,7 @@
                               Justify="Justify.SpaceBetween"
                               Spacing="2">
                         <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            @_page.TotalCount.ToString("N0") cluster(s)
+                            @_totalCount.ToString("N0") cluster(s)
                         </MudText>
 
                         <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
@@ -191,21 +266,21 @@
                                        ValueChanged="PageSizeChangedAsync"
                                        Variant="Variant.Outlined"
                                        Margin="Margin.Dense"
-                                       Disabled="@(_loading || _refreshing)">
+                                       Disabled="@IsBusy">
                                 <MudSelectItem Value="10">10</MudSelectItem>
                                 <MudSelectItem Value="25">25</MudSelectItem>
                                 <MudSelectItem Value="50">50</MudSelectItem>
                                 <MudSelectItem Value="100">100</MudSelectItem>
                             </MudSelect>
 
-                            @if (_page.TotalPages > 1)
+                            @if (_totalPages > 1)
                             {
-                                <MudPagination Count="@_page.TotalPages"
+                                <MudPagination Count="@_totalPages"
                                                Selected="@_pageNumber"
                                                SelectedChanged="PageChangedAsync"
                                                ShowFirstButton
                                                ShowLastButton
-                                               Disabled="@(_loading || _refreshing)"/>
+                                               Disabled="@IsBusy"/>
                             }
                         </MudStack>
                     </MudStack>
@@ -214,255 +289,3 @@
         }
     </ChildContent>
 </AppPageShell>
-
-@code {
-    private const int EndpointPageSize = 100;
-
-    private readonly CancellationTokenSource _disposeToken = new();
-    private IReadOnlyList<RasEndpoint> _endpoints = [];
-    private RasClusterPage _page = new([], 0, 1, 10, 0);
-    private Guid? _selectedEndpointId;
-    private string? _loadError;
-    private int _pageNumber = 1;
-    private int _pageSize = 10;
-    private bool _loadingEndpoints;
-    private bool _loading;
-    private bool _refreshing;
-    private bool _initialized;
-    private Guid? _appliedRequestedEndpointId;
-
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "rasEndpointId")]
-    public Guid? RequestedEndpointId { get; set; }
-
-    protected override async Task OnInitializedAsync()
-    {
-        if (ConnectionSettings.Current.IsConfigured)
-        {
-            await LoadEndpointsAsync();
-            if (_selectedEndpointId is not null)
-                await LoadPageAsync();
-        }
-
-        _appliedRequestedEndpointId = RequestedEndpointId;
-        _initialized = true;
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (!_initialized ||
-            _loadingEndpoints ||
-            RequestedEndpointId == _appliedRequestedEndpointId)
-            return;
-
-        _appliedRequestedEndpointId = RequestedEndpointId;
-        var endpointId = _endpoints.Any(endpoint => endpoint.Id == RequestedEndpointId)
-            ? RequestedEndpointId
-            : _endpoints.FirstOrDefault()?.Id;
-
-        if (endpointId == _selectedEndpointId)
-            return;
-
-        _selectedEndpointId = endpointId;
-        _pageNumber = 1;
-        _page = new RasClusterPage([], 0, 1, _pageSize, 0);
-        await LoadPageAsync();
-    }
-
-    private async Task LoadEndpointsAsync()
-    {
-        try
-        {
-            _loadingEndpoints = true;
-            _loadError = null;
-            _endpoints = (await LoadAllEndpointsAsync())
-                .Where(endpoint => endpoint.IsActive)
-                .ToArray();
-            _selectedEndpointId = _endpoints.Any(endpoint => endpoint.Id == RequestedEndpointId)
-                ? RequestedEndpointId
-                : _endpoints.FirstOrDefault()?.Id;
-        }
-        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Unable to load RAS endpoints for clusters");
-            _loadError = GetErrorMessage(exception, "Unable to load RAS endpoints from RasHub.");
-        }
-        finally
-        {
-            _loadingEndpoints = false;
-        }
-    }
-
-    private async Task<IReadOnlyList<RasEndpoint>> LoadAllEndpointsAsync()
-    {
-        var endpoints = new List<RasEndpoint>();
-
-        for (var pageNumber = 1;; pageNumber++)
-        {
-            var page = await RasEndpointService.GetPageAsync(
-                pageNumber,
-                EndpointPageSize,
-                _disposeToken.Token);
-            endpoints.AddRange(page.Items);
-
-            if (pageNumber >= page.TotalPages || page.Items.Count == 0)
-                return endpoints.DistinctBy(endpoint => endpoint.Id).ToArray();
-        }
-    }
-
-    private async Task ReloadEndpointsAsync()
-    {
-        await LoadEndpointsAsync();
-        if (_selectedEndpointId is not null && _loadError is null)
-            await LoadPageAsync();
-    }
-
-    private async Task LoadPageAsync()
-    {
-        if (_loading || _selectedEndpointId is not { } endpointId)
-            return;
-
-        try
-        {
-            _loading = true;
-            _loadError = null;
-            var page = await RasClusterService.GetShadowPageAsync(
-                endpointId,
-                _pageNumber,
-                _pageSize,
-                _disposeToken.Token);
-
-            if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
-            {
-                _pageNumber = page.TotalPages;
-                page = await RasClusterService.GetShadowPageAsync(
-                    endpointId,
-                    _pageNumber,
-                    _pageSize,
-                    _disposeToken.Token);
-            }
-
-            _page = page;
-        }
-        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(
-                exception,
-                "Unable to load cluster shadow for {RasEndpointId}",
-                endpointId);
-            _loadError = GetErrorMessage(exception, "Unable to load the cluster shadow from RasHub.");
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private async Task RefreshShadowAsync()
-    {
-        if (_refreshing || _selectedEndpointId is not { } endpointId)
-            return;
-
-        try
-        {
-            _refreshing = true;
-            var refresh = await RasClusterService.RefreshShadowAsync(
-                endpointId,
-                _disposeToken.Token);
-            Snackbar.Add(
-                $"Cluster shadow refreshed: {refresh.TotalCount:N0} cluster(s).",
-                Severity.Success);
-            _pageNumber = 1;
-            await LoadPageAsync();
-        }
-        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(
-                exception,
-                "Unable to refresh cluster shadow for {RasEndpointId}",
-                endpointId);
-            Snackbar.Add(
-                GetErrorMessage(exception, "Unable to refresh the cluster shadow through RasGate."),
-                Severity.Error);
-        }
-        finally
-        {
-            _refreshing = false;
-        }
-    }
-
-    private async Task EndpointChangedAsync(Guid? endpointId)
-    {
-        _selectedEndpointId = endpointId;
-        _appliedRequestedEndpointId = endpointId;
-        _pageNumber = 1;
-        _page = new RasClusterPage([], 0, 1, _pageSize, 0);
-
-        Navigation.NavigateTo(
-            endpointId is { } id
-                ? $"/clusters?rasEndpointId={id:D}"
-                : "/clusters",
-            replace: true);
-        await LoadPageAsync();
-    }
-
-    private async Task PageChangedAsync(int page)
-    {
-        _pageNumber = page;
-        await LoadPageAsync();
-    }
-
-    private async Task PageSizeChangedAsync(int pageSize)
-    {
-        _pageSize = pageSize;
-        _pageNumber = 1;
-        await LoadPageAsync();
-    }
-
-    private static string FormatEndpointAddress(RasEndpoint endpoint)
-    {
-        return endpoint.Host.Contains(':', StringComparison.Ordinal)
-            ? $"[{endpoint.Host}]:{endpoint.Port}"
-            : $"{endpoint.Host}:{endpoint.Port}";
-    }
-
-    private static string FormatClusterAddress(RasCluster cluster)
-    {
-        return cluster.Host.Contains(':', StringComparison.Ordinal)
-            ? $"[{cluster.Host}]:{cluster.Port}"
-            : $"{cluster.Host}:{cluster.Port}";
-    }
-
-    private static string FormatTime(DateTime value)
-    {
-        return value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
-    }
-
-    private static string GetErrorMessage(Exception exception, string fallback)
-    {
-        return exception switch
-        {
-            RasHubApiException apiException when apiException.TraceId is not null =>
-                $"{apiException.Message} Trace: {apiException.TraceId}",
-            RasHubApiException apiException => apiException.Message,
-            RasHubConnectionNotConfiguredException notConfigured => notConfigured.Message,
-            _ => fallback
-        };
-    }
-
-    public void Dispose()
-    {
-        _disposeToken.Cancel();
-        _disposeToken.Dispose();
-    }
-
-}

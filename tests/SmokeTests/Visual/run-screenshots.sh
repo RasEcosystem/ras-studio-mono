@@ -148,6 +148,7 @@ for theme in "${themes[@]}"; do
             "ras-gates|/ras-gates"
             "ras-endpoints|/ras-endpoints"
             "clusters|/clusters"
+            "infobases|/infobases"
             "assistant|/assistant"
             "health-events|/health-events"
             "settings|/settings"

@@ -45,40 +45,26 @@
             <MudStack Spacing="3">
                 <MudPaper Class="app-card" Elevation="1">
                     <MudGrid Spacing="2">
-                        <MudItem xs="12" md="8">
-                            <MudTextField T="string"
-                                          @bind-Value="_searchText"
-                                          Label="Search RasGates"
-                                          Placeholder="Name or URL"
-                                          Variant="Variant.Outlined"
-                                          Margin="Margin.Dense"
-                                          Adornment="Adornment.End"
-                                          AdornmentIcon="@Icons.Material.Outlined.Search"
-                                          OnAdornmentClick="ApplySearchAsync"
-                                          MaxLength="200"
-                                          Disabled="@(_loading || _busyGateId is not null)"
-                                          Immediate/>
-                        </MudItem>
-                        <MudItem xs="12" md="4">
-                            <MudStack Row
-                                      Wrap="Wrap.Wrap"
-                                      Justify="Justify.FlexEnd"
-                                      Spacing="1">
-                                <MudButton Variant="Variant.Outlined"
-                                           StartIcon="@Icons.Material.Outlined.Search"
-                                           Disabled="@(_loading || _busyGateId is not null)"
-                                           OnClick="ApplySearchAsync">
-                                    Search
-                                </MudButton>
-                                @if (!string.IsNullOrEmpty(_appliedSearch))
-                                {
-                                    <MudButton Variant="Variant.Text"
-                                               StartIcon="@Icons.Material.Outlined.FilterAltOff"
-                                               Disabled="@(_loading || _busyGateId is not null)"
-                                               OnClick="ClearSearchAsync">
-                                        Clear
-                                    </MudButton>
-                                }
+                        <MudItem xs="12">
+                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTextField T="string"
+                                              @bind-Value="_searchText"
+                                              Label="Search"
+                                              Placeholder="Name, URL"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Outlined.Search"
+                                              AdornmentAriaLabel="Search RasGates"
+                                              MaxLength="200"
+                                              Disabled="@(_busyGateId is not null)"
+                                              Immediate
+                                              DebounceInterval="350"
+                                              OnDebounceIntervalElapsed="SearchChangedAsync"
+                                              Clearable
+                                              ClearIcon="@Icons.Material.Outlined.Close"
+                                              OnClearButtonClick="ClearSearchAsync"
+                                              Class="flex-grow-1"/>
                                 <MudTooltip Text="Reload gateways and persisted status">
                                     <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
                                                    Color="Color.Primary"
@@ -107,10 +93,9 @@
                 }
 
                 <MudPaper Class="app-card ras-gates-card" Elevation="1">
-                    @if (_loading)
-                    {
-                        <MudProgressLinear Indeterminate Color="Color.Primary" Class="mb-2"/>
-                    }
+                    <MudProgressLinear Indeterminate="@_loading"
+                                       Color="Color.Primary"
+                                       Class="@ProgressClass(_loading)"/>
 
                     <MudTable T="RasGate"
                               Items="@_page.Items"
@@ -118,7 +103,7 @@
                               Elevation="0"
                               Breakpoint="Breakpoint.Md"
                               RowsPerPage="@int.MaxValue"
-                              Loading="@_loading">
+                              aria-busy="@_loading">
                         <HeaderContent>
                             <MudTh>Status</MudTh>
                             <MudTh>RasGate</MudTh>
@@ -182,7 +167,7 @@
                                              Dense
                                              AnchorOrigin="Origin.BottomRight"
                                              TransformOrigin="Origin.TopRight"
-                                             Disabled="@(_busyGateId is not null)"
+                                             Disabled="@(_loading || _busyGateId is not null)"
                                              AriaLabel="@($"Actions for {context.Name}")">
                                         <MudMenuItem Icon="@Icons.Material.Outlined.Refresh"
                                                      Disabled="@(!context.IsActive)"
@@ -297,6 +282,7 @@
     private int _pageNumber = 1;
     private int _pageSize = 10;
     private bool _loading;
+    private bool _loadPending;
 
     protected override async Task OnInitializedAsync()
     {
@@ -336,54 +322,61 @@
     private async Task LoadPageAsync()
     {
         if (_loading)
-            return;
-
-        _connection = ConnectionSettings.Current;
-        if (!_connection.IsConfigured)
-            return;
-
-        try
         {
-            _loading = true;
-            _loadError = null;
-            var page = await RasGateService.GetPageAsync(
-                _pageNumber,
-                _pageSize,
-                _appliedSearch,
-                SearchFields,
-                _disposeToken.Token);
+            _loadPending = true;
+            return;
+        }
 
-            if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+        do
+        {
+            _loadPending = false;
+            _connection = ConnectionSettings.Current;
+            if (!_connection.IsConfigured)
+                return;
+
+            try
             {
-                _pageNumber = page.TotalPages;
-                page = await RasGateService.GetPageAsync(
+                _loading = true;
+                _loadError = null;
+                var page = await RasGateService.GetPageAsync(
                     _pageNumber,
                     _pageSize,
                     _appliedSearch,
                     SearchFields,
                     _disposeToken.Token);
-            }
 
-            _page = page;
-            await LoadShadowStatusesAsync(page.Items);
-            Logger.LogDebug(
-                "Loaded RasGate page {Page} with {ItemCount} items of {TotalCount}",
-                page.Page,
-                page.Items.Count,
-                page.TotalCount);
-        }
-        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Unable to load RasGates from RasHub");
-            _loadError = GetErrorMessage(exception, "Unable to load RasGates from RasHub.");
-        }
-        finally
-        {
-            _loading = false;
-        }
+                if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+                {
+                    _pageNumber = page.TotalPages;
+                    page = await RasGateService.GetPageAsync(
+                        _pageNumber,
+                        _pageSize,
+                        _appliedSearch,
+                        SearchFields,
+                        _disposeToken.Token);
+                }
+
+                _page = page;
+                await LoadShadowStatusesAsync(page.Items);
+                Logger.LogDebug(
+                    "Loaded RasGate page {Page} with {ItemCount} items of {TotalCount}",
+                    page.Page,
+                    page.Items.Count,
+                    page.TotalCount);
+            }
+            catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError(exception, "Unable to load RasGates from RasHub");
+                _loadError = GetErrorMessage(exception, "Unable to load RasGates from RasHub.");
+            }
+            finally
+            {
+                _loading = false;
+            }
+        } while (_loadPending && !_disposeToken.IsCancellationRequested);
     }
 
     private async Task LoadShadowStatusesAsync(IReadOnlyList<RasGate> gates)
@@ -424,21 +417,30 @@
         }
     }
 
-    private async Task ApplySearchAsync()
+    private async Task SearchChangedAsync(string? searchText)
     {
-        _appliedSearch = string.IsNullOrWhiteSpace(_searchText)
+        _searchText = searchText;
+        var normalized = string.IsNullOrWhiteSpace(searchText)
             ? null
-            : _searchText.Trim();
+            : searchText.Trim();
+        if (string.Equals(normalized, _appliedSearch, StringComparison.Ordinal))
+            return;
+
+        _appliedSearch = normalized;
         _pageNumber = 1;
         await LoadPageAsync();
     }
 
-    private async Task ClearSearchAsync()
+    private Task ClearSearchAsync()
     {
-        _searchText = null;
-        _appliedSearch = null;
-        _pageNumber = 1;
-        await LoadPageAsync();
+        return SearchChangedAsync(null);
+    }
+
+    private static string ProgressClass(bool isVisible)
+    {
+        return isVisible
+            ? "app-table-progress app-table-progress--visible"
+            : "app-table-progress";
     }
 
     private async Task PageChangedAsync(int page)

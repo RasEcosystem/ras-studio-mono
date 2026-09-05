@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Extensions;
 using RasStudio.Application.Clusters;
+using RasStudio.Application.Infobases;
 using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasGates;
 using RasStudio.Application.RasHub;
@@ -26,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IRasGateService, RasHubRasGateClient>();
         services.AddScoped<IRasEndpointService, RasHubRasEndpointClient>();
         services.AddScoped<IRasClusterService, RasHubClusterClient>();
+        services.AddScoped<IRasInfobaseService, RasHubInfobaseClient>();
         services.AddScoped<IRasHubInfoService, RasHubInfoClient>();
 
         services
