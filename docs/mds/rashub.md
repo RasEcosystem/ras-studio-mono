@@ -1,9 +1,9 @@
 # RasHub: backend and public API
 
 Compatibility snapshot verified on 2026-09-05: official `main` @ `7e3cc15`.
-Current public release version is `0.1.1`.
+The public release covered by this document is `0.1.1`.
 
-RasHub is the only correct server boundary for RasStudio. It stores Gate
+RasStudio accesses infrastructure through RasHub. RasHub stores Gate
 registrations, managed RAS endpoints and their Gate assignments, and
 endpoint-owned shadow infrastructure. It authenticates users, submits remote
 work to the task engine, interprets RAC output, and securely publishes results.
@@ -19,7 +19,7 @@ work to the task engine, interprets RAC output, and securely publishes results.
 | `RasHub.Contracts` | Independent public wire request/response/model types | Server implementation dependencies |
 | `RasHub.Web` | Composition, controllers, Blazor/Identity, auth, monitoring, health | Reusable remote/persistence implementation |
 
-Actual `ProjectReference` dependencies in `consumer -> referenced project`
+`ProjectReference` dependencies in `consumer -> referenced project`
 format:
 
 ```text
@@ -49,10 +49,7 @@ Main entry points:
 - `src/RasHub.Web/Infrastructure/RasGates/RasGateTaskOptions.cs` — feature task
   retry/timeout/deduplication/concurrency policy.
 - `docs/code-map.md` and `docs/rac-compatibility.md` in RasHub — detailed sources
-  of truth.
-
-Before changing RasHub, always read its root `AGENTS.md`; the task engine is also
-governed by `src/RasHub.BackgroundTasks/AGENTS.md`.
+  for the implementation and supported RAC versions.
 
 ## Persistence model
 

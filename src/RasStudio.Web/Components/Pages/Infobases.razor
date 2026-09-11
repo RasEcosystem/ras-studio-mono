@@ -207,9 +207,9 @@
                     </MudTable>
 
                     <ResourceTableFooter TotalCount="@_totalCount"
-                                         PageSize="@_pageSize"
+                                         PageSize="@_loadedPageSize"
                                          PageSizeChanged="PageSizeChangedAsync"
-                                         PageNumber="@_pageNumber"
+                                         PageNumber="@_loadedPageNumber"
                                          PageNumberChanged="PageChangedAsync"
                                          TotalPages="@_totalPages"
                                          Disabled="@IsBusy"/>

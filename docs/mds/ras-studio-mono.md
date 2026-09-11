@@ -1,7 +1,7 @@
-# RasStudio Mono: Actual Architecture
+# RasStudio Mono architecture
 
-Reviewed for the `0.1.0` release candidate on 2026-09-05. This document
-describes the current `dev` implementation and RasHub `0.1.1` contract.
+This document describes RasStudio Mono `0.1.1` and its integration with the
+RasHub `0.1.1` contract.
 
 ## Product status
 
@@ -12,7 +12,7 @@ describes the current `dev` implementation and RasHub `0.1.1` contract.
 - Local ASP.NET Core/Kestrel on a dynamic loopback port.
 - Blazor Interactive Server and a MudBlazor shell.
 - Routing, responsive layout, and error/not-found/reconnect states.
-- Carbon, Slate, Light, and System themes.
+- Studio Mono (Slate), Carbon, Slate, Light, and System themes.
 - Persistence of the selected theme through Nava.Settings in a local SQLite
   database.
 - Security headers and Electron navigation/permission hardening.
@@ -24,7 +24,7 @@ describes the current `dev` implementation and RasHub `0.1.1` contract.
 - RAS endpoint paging, query, create/edit/delete, Gate assignment, and
   revision-safe updates through the Hub API.
 - Global and endpoint-scoped cluster browsing, search, details, synchronization,
-  creation, revision-safe update, and removal through the endpoint's assigned
+  creation, update, and removal through the endpoint's assigned
   Gate.
 - Global and cluster-scoped infobase browsing, search, complete shadow
   synchronization, and targeted live refresh.
@@ -59,7 +59,7 @@ Electron -> loopback Kestrel -> Blazor UI -> RasHub API
                                             -> assigned RasGate -> RAC
 ```
 
-## Projects and actual dependencies
+## Projects and dependencies
 
 ```text
 RasStudio.Web -> RasStudio.Application
@@ -69,7 +69,7 @@ RasStudio.Infrastructure -> RasHub.Contracts
 RasStudio.Application -> Nava.Settings -> EF Core SQLite (transitive)
 ```
 
-| Project | Current contents | Start reading at |
+| Project | Contents | Entry points |
 |---|---|---|
 | `src/RasStudio.Web` | Composition root, Electron, Blazor UI, diagnostics/logging, themes, assets, and package profiles | `Program.cs`, `Infrastructure/Logging`, `Infrastructure/Diagnostics` |
 | `src/RasStudio.Application` | Settings plus assistant, RasHub, RasGate, RAS endpoint, cluster, and infobase ports/models | `Settings`, `Assistant`, `RasGates`, `RasEndpoints`, `Clusters`, `Infobases`, `RasHub` |
@@ -192,7 +192,7 @@ Configuration keys in use:
 
 ## UI map
 
-| Route | File | Actual behavior |
+| Route | File | Behavior |
 |---|---|---|
 | `/` | `Components/Pages/Home.razor` | Warning/error diagnostics plus live RasGate and RAS endpoint counts |
 | `/ras-gates` | `Components/Pages/RasGates.razor` | Complete RasGate query/search/admin/status UI through RasHub |
@@ -211,16 +211,37 @@ Composition:
 - `Components/Routes.razor` — Router and `MainLayout`.
 - `Components/Layout/MainLayout.razor` — app bar, mini drawer, and providers.
 - `Components/Layout/NavMenu.razor` — Home/RasGates/RAS endpoints/Clusters/Infobases/Application events/Assistant/Settings.
-- `Components/AppPageShell.razor` — common page width/header/content layout.
-- `Components/AppEmptyState.razor` and `AppLoadingState.razor` — shared states.
+- `Components/Shared/Pages/AppPageShell.razor` — common page width/header/content layout.
+- `Components/Shared/States/AppEmptyState.razor` and `Components/Shared/States/AppLoadingState.razor` — shared states.
 
 All five data-list pages share the Warden table layout through
 `wwwroot/styles/resource-tables.css`: above 960px, the table fills the remaining
 viewport height, its header stays fixed, rows scroll inside the table, and the
 pager remains at the bottom. Narrower layouts use normal page scrolling.
-Hub-backed lists use `Components/ResourceTableFooter.razor` with the Warden/Mud
+Hub-backed lists use `Components/Shared/Tables/ResourceTableFooter.razor` with the Warden/Mud
 page-size selector, item range, and first/previous/next/last controls; events use
-the native `MudTablePager`. Changing the page size resets Hub lists to page one.
+the native `MudTablePager`. Changing the page size requests page one. Rows and
+the displayed pagination are committed together after a successful load; failures
+retain the previous page and show an error. Superseded search responses are ignored.
+
+Without a search query, `Components/Shared/Tables/CatalogPager.cs` concatenates cluster sources
+by endpoint and infobase sources by endpoint/cluster. Sources are ordered by name
+and ID; rows within each source keep Hub's server order. Sorting incomplete
+server pages locally can omit or duplicate rows when database collation differs
+from the client comparer.
+The pager fetches each source's first page for its count, then only pages touching
+the requested window, with at most eight concurrent count requests. Search uses
+Hub's global search endpoints and their ordering directly.
+
+Reload refreshes active endpoints and the selected endpoint's cluster filters,
+preserving valid selections and clearing removed ones. Refresh all from RAS also
+discovers the current active endpoints before issuing live operations. Ordinary
+page navigation reads shadow data and does not trigger live refreshes.
+
+Hub currently supplies offset pagination without a shared snapshot token. A
+detected count change or incomplete source window fails the load instead of
+publishing a partial page. Concurrent updates with unchanged counts cannot be
+made snapshot-consistent by the Mono client alone.
 
 ### Themes
 
@@ -266,7 +287,7 @@ package includes the repository's MIT license. `PublishTrimmed` and
 `PublishSingleFile` are disabled. Outputs go to `artifacts/desktop`.
 
 Pushes and pull requests targeting `dev` or `main` run the Linux verification
-suite and build the Windows packages. A version tag such as `v0.1.0` must match
+suite and build the Windows packages. A version tag such as `v0.1.1` must match
 `version.json`; after both platform jobs pass, GitHub Actions publishes a release
 containing the AppImage, Windows installer, portable executable, generated
 release notes, and `SHA256SUMS`.
@@ -297,17 +318,11 @@ tests/SmokeTests/Desktop
 5. `tests/SmokeTests/Desktop/run-smoke.sh`;
 6. `tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh`.
 
-`make release` adds Electron and packaged dependency audits, creates the Linux
-AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
-desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
-developer's already-running production instance cannot make CI nondeterministic;
-the production manifest is still asserted to keep `singleInstance=true`.
-
-`make release` adds Electron and packaged dependency audits, creates the Linux
-AppImage, and runs the installed-layout lifecycle smoke test. The unpackaged
-desktop smoke uses a temporary test manifest with `singleInstance=false`, so a
-developer's already-running production instance cannot make CI nondeterministic;
-the production manifest is still asserted to keep `singleInstance=true`.
+`make release` adds host-platform packaging and packaged dependency audits.
+On Linux it also runs a lifecycle check against the built AppImage. The
+unpackaged desktop check uses a temporary manifest with `singleInstance=false`
+to isolate it from an already-running application. The production manifest is
+checked for `singleInstance=true`.
 
 The desktop smoke test checks the generated Electron config, security hook,
 PackageId, loopback console output, Socket.IO connection, creation of the
@@ -315,9 +330,8 @@ settings database, rolling log creation, logged start/stop lifecycle, and
 coordinated Electron/backend shutdown. The packaged Linux smoke repeats the
 critical lifecycle assertions against the built AppImage.
 
-The ignored `artifacts/` directory contains outputs from several historical
-architectures, including old dashboard/login screenshots. Do not use it as a
-map of the current code.
+The ignored `artifacts/` directory can contain output from older builds.
+Release verification uses freshly built packages.
 
 ## Change map
 
@@ -329,13 +343,12 @@ map of the current code.
 | Startup/local data | `Program.cs` | Nava DI, configuration, and desktop tests |
 | Electron security/lifecycle | `.electron/custom_main.js`, `Program.cs` | Desktop smoke test and package output |
 | Packaging | Web `.csproj`, `electron-builder.json`, `PublishProfiles` | Host-specific package build |
-| RasHub integration | Start with [RasHub context](rashub.md) and the contracts revision | Application port/model, Infrastructure client, Web DI/UI, API/serialization tests |
+| RasHub integration | [RasHub API](rashub.md) and the contracts revision | Application port/model, Infrastructure client, Web DI/UI, API/serialization tests |
 | MCP/assistant | `Infrastructure/Mcp`, `Infrastructure/Assistant`, `Components/Pages/Assistant.razor` | Tool annotations/tests, MCP smoke, provider settings, chat behavior |
 
-## Historical trap
+## Migration history
 
-Commit `8970224` migrated the project to Electron and deliberately removed the
+Commit `8970224` migrated the project to Electron and removed the
 previous ASP.NET Identity UI, EF user database, authorization services, and
-infobase/user pages. Old artifacts may contain their files and screenshots, but
-they do not describe the current runtime. Do not restore that architecture only
-because it is visible in Git history.
+infobase/user pages. The current infobase page uses RasHub; it does not depend
+on the former local user database or authorization services.

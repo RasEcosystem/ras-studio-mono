@@ -1,71 +1,42 @@
-# Internal RasStudio Mono Context
+# RasStudio Mono documentation
 
-This directory is a compact working memory for the project and the neighboring
-Ras Ecosystem services. It is intended to shorten context recovery before
-reading the source code; it does not replace the code, repository `README`
-files, or repository-specific instructions.
+Technical documentation for RasStudio Mono and its integration with RasHub and
+RasGate.
 
-The snapshot was last updated on **2026-09-04** against the local checkouts and the
-official GitHub repositories. Exact revisions are listed in the
-[ecosystem map](ecosystem.md#repository-snapshot).
+## Contents
 
-## Reading Order
+- [Architecture](ras-studio-mono.md) — application layers, startup, settings,
+  UI components, and packaging.
+- [Development](development.md) — dependencies, build commands, tests, and releases.
+- [Ecosystem](ecosystem.md) — service responsibilities, identifiers, authentication,
+  and shadow/live data flows.
+- [RasHub API](rashub.md) — backend architecture and the contracts used by Studio.
+- [RasGate API](rasgate.md) — HTTP-to-RAC execution and deployment.
 
-1. [Ecosystem and end-to-end flows](ecosystem.md) — the roles of Studio, Hub,
-   and Gate; identifiers; shadow/live semantics; and trust boundaries.
-2. [RasStudio Mono](ras-studio-mono.md) — the actual implementation in this
-   repository, including runtime, UI, settings, and the source map.
-3. [RasHub](rashub.md) — backend layers, HTTP API, and shared contracts.
-4. [RasGate](rasgate.md) — the thin HTTP-to-RAC boundary and execution
-   semantics.
-5. [Development guide](development.md) — Git/submodules, commands, checks,
-   known limitations, and change-routing guidance.
+## Integration
 
-For a small UI task, sections 1, 2, and 5 are usually sufficient. Read all
-documents before connecting live data or changing wire models.
+Studio addresses resources by `RasEndpointId`. RasHub resolves the assigned
+RasGate and RAS address:
 
-## Most Important Current Facts
+```text
+RasStudio -> RasHub -> RAS endpoint -> assigned RasGate -> RAC -> RAS
+```
 
-- `RasStudio -> RasHub -> RAS endpoint -> assigned RasGate -> RAC -> RAS` is the
-  target architecture. Studio addresses resources by `RasEndpointId`; Hub
-  resolves the execution Gate and RAS `host:port`.
-- The Electron shell, loopback Kestrel host, Blazor Interactive Server, themes,
-  and local SQLite settings are implemented and operational.
-- The RasGates page supports server-side paging/search, create/update/delete,
-  activation, revision-safe updates, and shadow/live status. RAS endpoints have
-  their own CRUD page, and Clusters reads/refreshes endpoint-owned shadow data.
-  There is no Infobases page yet.
-- `RasStudio.Infrastructure` references `RasHub.Contracts`, maps wire contracts
-  into Application models, and exposes the RasHub HTTP adapter.
-- The intended contracts revision is `25b453d` from RasHub `0.1.1`. Until the
-  superproject gitlink change is committed, commands that invoke
-  `git submodule update` can move the checkout back to the recorded revision.
+RasGates and RAS endpoints have management pages. Clusters supports browsing,
+search, creation, editing, removal, and live refresh. Infobases supports browsing,
+search, full synchronization, and targeted refresh; its API does not provide CRUD.
 
-## Source-of-Truth Order
+`RasStudio.Infrastructure` maps the shared wire contracts into Application models.
+The `RasHub.Contracts` submodule is pinned to `25b453d`, the endpoint-aware
+contract for RasHub `0.1.1`. Normal build commands restore that recorded revision.
 
-When sources disagree, use this order:
+## Scope and maintenance
 
-1. The actual checkout and executable code in the relevant repository.
-2. The nearest nested `AGENTS.md`, followed by the repository-level
-   `AGENTS.md`.
-3. Tests, project files, configuration, and migrations.
-4. The official repository README and specialized documentation.
-5. The files in this directory.
+The Studio documentation describes the `0.1.1` implementation. The Hub and Gate
+documents describe the dated revisions in the
+[compatibility snapshot](ecosystem.md#repository-compatibility-snapshot), not
+necessarily their latest releases.
 
-Do not infer current architecture from old ignored artifacts or Git history
-unless the task explicitly requires it. In particular, the Identity UI that
-existed before the Electron migration was deliberately removed and is not part
-of the current Studio application.
-
-## Maintaining This Context
-
-Update these files whenever any of the following changes:
-
-- a project or layer dependency or responsibility;
-- an HTTP route, request/response model, or authentication policy;
-- the `RasHub.Contracts` revision actually consumed by Studio;
-- startup mode, local-data path, Electron security, or packaging;
-- verification commands or the actual implementation status of a page.
-
-Always distinguish **implemented behavior** from the **target design**, and
-record the revision whenever a conclusion depends on a neighboring repository.
+Update the relevant documentation when changing application layers, API
+contracts, authentication, settings, UI structure, or build commands. Code,
+tests, and the pinned dependency revisions determine the implemented behavior.

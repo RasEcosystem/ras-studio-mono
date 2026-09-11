@@ -1,5 +1,5 @@
 using RasStudio.Application.Clusters;
-using RasStudio.Web.Components;
+using RasStudio.Web.Components.Features.Clusters;
 using RasStudio.Web.Components.Pages;
 
 namespace RasStudio.Web.UnitTests;

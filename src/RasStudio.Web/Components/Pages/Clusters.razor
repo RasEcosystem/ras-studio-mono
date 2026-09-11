@@ -27,7 +27,7 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Outlined.Sync"
-                       Disabled="@(_endpoints.Count == 0 || IsBusy)"
+                       Disabled="@(IsBusy || !ConnectionSettings.Current.IsConfigured)"
                        OnClick="RefreshShadowAsync">
                 @(_refreshing ? "Refreshing all…" : "Refresh all from RAS")
             </MudButton>
@@ -241,7 +241,7 @@
                                     <MudButton Variant="Variant.Outlined"
                                                Color="Color.Primary"
                                                StartIcon="@Icons.Material.Outlined.Sync"
-                                               Disabled="@(_endpoints.Count == 0 || IsBusy)"
+                                               Disabled="@IsBusy"
                                                OnClick="RefreshShadowAsync">
                                         Refresh all from RAS
                                     </MudButton>
@@ -251,9 +251,9 @@
                     </MudTable>
 
                     <ResourceTableFooter TotalCount="@_totalCount"
-                                         PageSize="@_pageSize"
+                                         PageSize="@_loadedPageSize"
                                          PageSizeChanged="PageSizeChangedAsync"
-                                         PageNumber="@_pageNumber"
+                                         PageNumber="@_loadedPageNumber"
                                          PageNumberChanged="PageChangedAsync"
                                          TotalPages="@_totalPages"
                                          Disabled="@IsBusy"/>

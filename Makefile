@@ -87,7 +87,7 @@ package-audit:
 		MINGW*|MSYS*|CYGWIN*) publish_dir='src/RasStudio.Web/bin/Release/net10.0/win-x64/publish' ;; \
 		*) printf '%s\n' 'Package auditing is configured for Windows and Linux hosts.' >&2; exit 1 ;; \
 	esac; \
-	npm --prefix "$$publish_dir/app" audit --omit=dev --audit-level=high; \
+	npm --prefix "$$publish_dir/app" audit --omit=dev --audit-level=high && \
 	npm --prefix "$$publish_dir" audit --omit=dev --audit-level=high
 
 packaged-linux-smoke:

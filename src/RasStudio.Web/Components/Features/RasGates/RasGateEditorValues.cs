@@ -1,4 +1,4 @@
-namespace RasStudio.Web.Components;
+namespace RasStudio.Web.Components.Features.RasGates;
 
 public sealed record RasGateEditorValues(
     string Name,

@@ -7,8 +7,8 @@
 [![Electron](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Windows & Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-2563EB)](#requirements)
 
-RasStudio Mono is an experimental cross-platform desktop application for
-managing 1C:Enterprise RAS infrastructure.
+RasStudio Mono is a desktop application for managing 1C:Enterprise servers and
+clusters through RAS. It runs on Windows and Linux.
 
 > **Note:** RasStudio Mono is experimental and comes with no guarantees of
 > stability, feature completeness, or compatibility between releases. Its
@@ -19,40 +19,26 @@ managing 1C:Enterprise RAS infrastructure.
 ## RAS management
 
 - register RasGates and assign RAS endpoints to them;
-- browse cluster shadows across all active RAS endpoints, filter and search them,
-  and synchronize, create, update, or remove clusters through RasHub;
-- browse infobase shadows across all active endpoints and clusters, narrow them
-  by endpoint and cluster, search globally, and synchronize complete or
-  individual live infobase state.
+- browse, search, and filter clusters across active RAS endpoints; create, edit,
+  remove, and refresh them through RasHub;
+- browse and search infobases, filter by endpoint or cluster, and refresh one
+  infobase or all infobases in the selected cluster.
+
+Lists show data stored in RasHub. Run synchronization to fetch the current state
+from RAS.
 
 1C:Enterprise server agent and cluster administrator credentials are sent only
 for the corresponding operation and are not stored by RasStudio.
 
-Operational names, addresses, identifiers, and timestamps are blurred in the
-screenshots below.
-
-### RasGate connections
-
-![RasStudio Mono RasGates page with sensitive infrastructure data blurred](docs/img/ras-studio-ras-gates.png)
-
-### Clusters
-
-![RasStudio Mono Clusters page with sensitive infrastructure data blurred](docs/img/ras-studio-clusters.png)
-
-### Infobases
-
-![RasStudio Mono Infobases page with sensitive infrastructure data blurred](docs/img/ras-studio-infobases.png)
-
 ## AI assistant
 
-The built-in assistant provides streaming responses through an Ollama- or
-unauthenticated OpenAI-compatible endpoint. It can use the protected embedded
-MCP server to read application metadata, check RasHub connectivity and
-compatibility, inspect the RasGate and RAS endpoint inventory, report recent
-application issues, and show persisted RasGate health. These read-only
-capabilities are exposed through `get_rasstudio_info`, `get_rashub_status`,
-`get_infrastructure_overview`, `get_application_issues`, and
-`get_rasgate_status`; endpoint and model settings are stored locally.
+The assistant helps check the RasHub connection, inspect RasGate status, and
+review recent application errors. It reads data through the protected embedded
+MCP server and cannot change infrastructure.
+
+It requires Ollama or another OpenAI-compatible server that does not require an
+API key. Responses appear as they arrive. The server address and selected model
+are saved in the application settings.
 
 ![RasStudio Mono Assistant reporting the overall infrastructure status](docs/img/ras-studio-assistant.png)
 
@@ -72,7 +58,7 @@ Electron window → Kestrel on 127.0.0.1 → Blazor Server
                RasHub → RAS endpoint → assigned RasGate → RAC → RAS
 ```
 
-Application preferences are stored in one local SQLite settings database:
+Settings are stored in a local SQLite file:
 
 - Windows: `%LOCALAPPDATA%\RasStudio\settings.db`
 - Linux: `$XDG_DATA_HOME/RasStudio/settings.db`, normally
@@ -100,14 +86,14 @@ Restore and build:
 make build
 ```
 
-Run the unpackaged desktop application:
+Run the application from source:
 
 ``` bash
 make run
 ```
 
-ElectronNET.Core binds Kestrel to a dynamically selected loopback-only port.
-Closing the desktop window stops Electron and the backend process together.
+The application's local server is accessible only from the same computer.
+Its port is selected automatically, and it stops when the window closes.
 
 ## Packaging
 
@@ -117,41 +103,40 @@ Build a package for the current host OS:
 make package
 ```
 
-Or select the target explicitly:
+Commands for each platform:
 
 ``` bash
 make package-linux
 make package-windows
 ```
 
-For the complete Linux release gate (tests, package, dependency audit, and a
-packaged application lifecycle check), run:
+To run tests, build the package, audit dependencies, and check the packaged
+application on Linux:
 
 ``` bash
 make release
 ```
 
-Linux produces an x64 AppImage. Windows produces an x64 NSIS installer and a
-portable executable. Electron packages are platform-specific: build Windows
-packages on Windows and Linux packages on Linux (or through WSL where supported
-by ElectronNET.Core). Results are written to `artifacts/desktop`.
+Linux produces an AppImage. Windows produces an NSIS installer and a portable
+executable. All packages target x64. Build each package on its target operating
+system. Results are written to `artifacts/desktop`.
 
 ## Verification
 
-Run the full available verification suite:
+Run the checks:
 
 ``` bash
 make test
 ```
 
-The suite builds Release, runs unit and integration tests, verifies the
-authenticated embedded MCP endpoint, captures all themes in desktop/mobile
-viewports, and runs a real headless Electron lifecycle check. The lifecycle
-check verifies that Kestrel binds only to `127.0.0.1` and exits when the desktop
-window closes.
+This builds the application in Release mode, checks formatting and dependencies,
+and runs unit and integration tests. It also checks MCP authentication and
+confirms that the local server stops when the window closes. Electron needs a
+display or virtual display; CI uses Xvfb.
 
-`make electron-audit` checks the generated Electron dependency tree, while
-`make package-audit` checks both Node trees copied into the desktop package.
+`make electron-audit` checks Electron dependencies for known vulnerabilities.
+`make package-audit` checks the Node.js dependencies used to build and run the
+package.
 
 ## Related projects
 

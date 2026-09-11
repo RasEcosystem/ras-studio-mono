@@ -125,7 +125,9 @@ the old assignment from publishing.
 
 ## Repository Compatibility Snapshot
 
-Verified on 2026-09-05 for the RasStudio `0.1.0` release candidate.
+The following compatibility points were recorded on 2026-09-05 for RasStudio
+`0.1.0`. This is a historical reference, not a list of current repository heads.
+The Studio application version is maintained in `version.json`.
 
 | Repository | Studio compatibility point | Official state | Notes |
 |---|---|---|---|
@@ -134,7 +136,7 @@ Verified on 2026-09-05 for the RasStudio `0.1.0` release candidate.
 | `RasHub` | `0.1.1` | `main` @ `7e3cc15`, release `v0.1.1` | Provides RAS endpoints and resource operations |
 | `RasGate` | HTTP execution contract from `0.2.1` | `main` @ `8582a31`, release `v0.2.1` | Remains the thin command executor |
 
-## System Constraints to Keep in Mind
+## System constraints
 
 - RasHub BackgroundTasks, deduplication, schedules, and concurrency keys exist
   only in one process's memory. The current production topology is one replica.

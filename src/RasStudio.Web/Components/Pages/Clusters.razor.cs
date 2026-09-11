@@ -4,13 +4,14 @@ using MudBlazor;
 using RasStudio.Application.Clusters;
 using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasHub;
+using RasStudio.Web.Components.Features.Clusters;
+using RasStudio.Web.Components.Shared.Tables;
 
 namespace RasStudio.Web.Components.Pages;
 
 public partial class Clusters
 {
     private const int EndpointPageSize = 100;
-    private const int CatalogRequestConcurrency = 8;
     private const int RefreshGateConcurrency = 4;
 
     private static readonly DialogOptions EditorDialogOptions = new()
@@ -32,6 +33,8 @@ public partial class Clusters
     private IReadOnlyList<ClusterRow> _items = [];
     private string? _loadError;
     private bool _loadPending;
+    private int _loadedPageNumber = 1;
+    private int _loadedPageSize = 10;
     private bool _loading;
     private bool _loadingEndpoints;
     private int _pageNumber = 1;
@@ -51,10 +54,10 @@ public partial class Clusters
     public string? RequestedQuery { get; set; }
 
     private bool IsBusy =>
-        _loading || _refreshing || _busyEndpointId is not null || _busyClusterId is not null;
+        _loading || _loadingEndpoints || _refreshing || _busyEndpointId is not null || _busyClusterId is not null;
 
     private bool IsSearchDisabled =>
-        _refreshing || _busyEndpointId is not null || _busyClusterId is not null;
+        _loadingEndpoints || _refreshing || _busyEndpointId is not null || _busyClusterId is not null;
 
     public void Dispose()
     {
@@ -178,7 +181,8 @@ public partial class Clusters
                 else
                     await LoadCatalogPageAsync();
 
-                UpdateUrl();
+                if (!_loadPending)
+                    UpdateUrl();
             }
             catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
             {
@@ -186,7 +190,12 @@ public partial class Clusters
             catch (Exception exception)
             {
                 Logger.LogError(exception, "Unable to load cluster shadow catalog");
-                _loadError = GetErrorMessage(exception, "Unable to load the cluster shadow from RasHub.");
+                if (!_loadPending)
+                {
+                    _pageNumber = _loadedPageNumber;
+                    _pageSize = _loadedPageSize;
+                    _loadError = GetErrorMessage(exception, "Unable to load the cluster shadow from RasHub.");
+                }
             }
             finally
             {
@@ -197,24 +206,31 @@ public partial class Clusters
 
     private async Task LoadSearchPageAsync(string query)
     {
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
+        var selectedEndpointId = _selectedEndpointId;
         var page = await RasClusterService.SearchShadowPageAsync(
             query,
-            _selectedEndpointId,
-            _pageNumber,
-            _pageSize,
+            selectedEndpointId,
+            pageNumber,
+            pageSize,
             _disposeToken.Token);
 
-        if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+        if (page.TotalPages > 0 && pageNumber > page.TotalPages)
         {
-            _pageNumber = page.TotalPages;
+            pageNumber = page.TotalPages;
             page = await RasClusterService.SearchShadowPageAsync(
                 query,
-                _selectedEndpointId,
-                _pageNumber,
-                _pageSize,
+                selectedEndpointId,
+                pageNumber,
+                pageSize,
                 _disposeToken.Token);
         }
 
+        if (_loadPending)
+            return;
+
+        _pageNumber = page.TotalCount == 0 ? 1 : pageNumber;
         ApplyPage(
             page.Items.Select(item => new ClusterRow(
                     item.RasEndpointId,
@@ -227,23 +243,29 @@ public partial class Clusters
 
     private async Task LoadEndpointPageAsync(Guid endpointId)
     {
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
         var page = await RasClusterService.GetShadowPageAsync(
             endpointId,
-            _pageNumber,
-            _pageSize,
+            pageNumber,
+            pageSize,
             _disposeToken.Token);
 
-        if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+        if (page.TotalPages > 0 && pageNumber > page.TotalPages)
         {
-            _pageNumber = page.TotalPages;
+            pageNumber = page.TotalPages;
             page = await RasClusterService.GetShadowPageAsync(
                 endpointId,
-                _pageNumber,
-                _pageSize,
+                pageNumber,
+                pageSize,
                 _disposeToken.Token);
         }
 
         var endpointName = SelectedEndpoint()?.Name ?? endpointId.ToString("D");
+        if (_loadPending)
+            return;
+
+        _pageNumber = page.TotalCount == 0 ? 1 : pageNumber;
         ApplyPage(
             page.Items.Select(cluster => new ClusterRow(endpointId, endpointName, cluster))
                 .ToArray(),
@@ -253,78 +275,55 @@ public partial class Clusters
 
     private async Task LoadCatalogPageAsync()
     {
-        var requestedItemCount = checked(_pageNumber * _pageSize);
-        using var concurrency = new SemaphoreSlim(CatalogRequestConcurrency);
-        var tasks = _endpoints.Select(async endpoint =>
-        {
-            await concurrency.WaitAsync(_disposeToken.Token);
-            try
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
+        var sources = _endpoints;
+        var page = await CatalogPager.LoadAsync(
+            sources,
+            pageNumber,
+            pageSize,
+            async (source, number, size, cancellationToken) =>
             {
-                return await LoadCatalogSliceAsync(endpoint, requestedItemCount);
-            }
-            finally
-            {
-                concurrency.Release();
-            }
-        });
+                var sourcePage = await RasClusterService.GetShadowPageAsync(
+                    source.Id,
+                    number,
+                    size,
+                    cancellationToken);
+                return new CatalogSlice<ClusterRow>(
+                    sourcePage.Items.Select(item => new ClusterRow(
+                            source.Id,
+                            source.Name,
+                            item))
+                        .ToArray(),
+                    sourcePage.TotalCount);
+            },
+            _disposeToken.Token);
+        if (_loadPending)
+            return;
 
-        var slices = await Task.WhenAll(tasks);
-        var totalCount = slices.Sum(slice => slice.TotalCount);
-        var totalPages = CalculateTotalPages(totalCount, _pageSize);
-        if (totalPages > 0 && _pageNumber > totalPages)
-            _pageNumber = totalPages;
-
-        var items = slices.SelectMany(slice => slice.Items)
-            .OrderBy(row => row.Cluster.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.RasEndpointName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.RasEndpointId)
-            .ThenBy(row => row.Cluster.Id)
-            .Skip((_pageNumber - 1) * _pageSize)
-            .Take(_pageSize)
-            .ToArray();
-        ApplyPage(items, totalCount, totalPages);
-    }
-
-    private async Task<ClusterCatalogSlice> LoadCatalogSliceAsync(
-        RasEndpoint endpoint,
-        int requestedItemCount)
-    {
-        var clusters = new List<RasCluster>();
-        var sourcePageSize = Math.Min(100, requestedItemCount);
-        var sourcePageCount = CalculateTotalPages(requestedItemCount, sourcePageSize);
-        var totalCount = 0;
-
-        for (var sourcePageNumber = 1; sourcePageNumber <= sourcePageCount; sourcePageNumber++)
-        {
-            var page = await RasClusterService.GetShadowPageAsync(
-                endpoint.Id,
-                sourcePageNumber,
-                sourcePageSize,
-                _disposeToken.Token);
-            totalCount = page.TotalCount;
-            clusters.AddRange(page.Items);
-
-            if (sourcePageNumber >= page.TotalPages || page.Items.Count == 0)
-                break;
-        }
-
-        return new ClusterCatalogSlice(
-            clusters.Select(cluster => new ClusterRow(
-                    endpoint.Id,
-                    endpoint.Name,
-                    cluster))
-                .ToArray(),
-            totalCount);
+        _pageNumber = page.Page;
+        ApplyPage(page.Items, page.TotalCount, page.TotalPages);
     }
 
     private async Task RefreshShadowAsync()
     {
-        if (_refreshing || _endpoints.Count == 0)
+        if (IsBusy)
             return;
 
         try
         {
             _refreshing = true;
+            await LoadEndpointsAsync();
+            if (_loadError is not null || _disposeToken.IsCancellationRequested)
+                return;
+            if (_endpoints.Count == 0)
+            {
+                _pageNumber = 1;
+                ApplyPage([], 0, 0);
+                UpdateUrl();
+                return;
+            }
+
             var results = await RefreshAllEndpointsAsync();
             var succeeded = results.Where(result => result.Refresh is not null).ToArray();
             var failed = results.Where(result => result.Error is not null).ToArray();
@@ -678,7 +677,12 @@ public partial class Clusters
 
     private async Task ReloadDataAsync()
     {
-        await LoadPageAsync();
+        if (IsBusy)
+            return;
+
+        await LoadEndpointsAsync();
+        if (_loadError is null && !_disposeToken.IsCancellationRequested)
+            await LoadPageAsync();
     }
 
     private async Task PageChangedAsync(int page)
@@ -696,6 +700,8 @@ public partial class Clusters
 
     private void ApplyPage(IReadOnlyList<ClusterRow> items, int totalCount, int totalPages)
     {
+        _loadedPageNumber = _pageNumber;
+        _loadedPageSize = _pageSize;
         _items = items;
         _totalCount = totalCount;
         _totalPages = totalPages;
@@ -745,11 +751,6 @@ public partial class Clusters
     private bool IsBusyCluster(ClusterRow row)
     {
         return _busyEndpointId == row.RasEndpointId && _busyClusterId == row.Cluster.Id;
-    }
-
-    private static int CalculateTotalPages(int totalCount, int pageSize)
-    {
-        return totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
     }
 
     private static string FormatEndpointAddress(RasEndpoint endpoint)
@@ -806,10 +807,6 @@ public partial class Clusters
         Guid RasEndpointId,
         string RasEndpointName,
         RasCluster Cluster);
-
-    private sealed record ClusterCatalogSlice(
-        IReadOnlyList<ClusterRow> Items,
-        int TotalCount);
 
     private sealed record EndpointRefreshResult(
         RasEndpoint Endpoint,

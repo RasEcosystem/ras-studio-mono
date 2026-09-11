@@ -1,4 +1,4 @@
-namespace RasStudio.Web.Components;
+namespace RasStudio.Web.Components.Shared.Icons;
 
 public static class AppIcons
 {

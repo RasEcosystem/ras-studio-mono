@@ -1,4 +1,4 @@
-namespace RasStudio.Web.Components;
+namespace RasStudio.Web.Components.Features.RasEndpoints;
 
 public sealed record RasEndpointEditorValues(
     string Name,

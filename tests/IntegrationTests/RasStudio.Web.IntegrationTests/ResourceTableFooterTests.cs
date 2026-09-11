@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using RasStudio.Web.Components;
+using RasStudio.Web.Components.Shared.Tables;
 using RasStudio.Web.IntegrationTests.Infrastructure;
 
 namespace RasStudio.Web.IntegrationTests;

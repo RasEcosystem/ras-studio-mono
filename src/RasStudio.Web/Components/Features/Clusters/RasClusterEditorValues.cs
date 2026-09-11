@@ -1,6 +1,6 @@
 using RasStudio.Application.Clusters;
 
-namespace RasStudio.Web.Components;
+namespace RasStudio.Web.Components.Features.Clusters;
 
 public sealed record RasClusterEditorValues(
     Guid? RasEndpointId,

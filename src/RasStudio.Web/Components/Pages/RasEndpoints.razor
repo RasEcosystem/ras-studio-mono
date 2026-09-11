@@ -201,9 +201,9 @@
                     </MudTable>
 
                     <ResourceTableFooter TotalCount="@_page.TotalCount"
-                                         PageSize="@_pageSize"
+                                         PageSize="@_page.PageSize"
                                          PageSizeChanged="PageSizeChangedAsync"
-                                         PageNumber="@_pageNumber"
+                                         PageNumber="@_page.Page"
                                          PageNumberChanged="PageChangedAsync"
                                          TotalPages="@_page.TotalPages"
                                          Disabled="@(_loading || _busyEndpointId is not null)"/>
@@ -269,7 +269,9 @@
                     _disposeToken.Token);
             }
 
-            _page = page;
+            _page = page with { Page = page.TotalCount == 0 ? 1 : page.Page };
+            _pageNumber = _page.Page;
+            _pageSize = _page.PageSize;
         }
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {
@@ -277,6 +279,8 @@
         catch (Exception exception)
         {
             Logger.LogError(exception, "Unable to load RAS endpoints from RasHub");
+            _pageNumber = _page.Page;
+            _pageSize = _page.PageSize;
             _loadError = GetErrorMessage(exception, "Unable to load RAS endpoints from RasHub.");
         }
         finally

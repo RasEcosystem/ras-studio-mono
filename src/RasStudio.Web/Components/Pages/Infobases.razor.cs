@@ -4,6 +4,8 @@ using RasStudio.Application.Clusters;
 using RasStudio.Application.Infobases;
 using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasHub;
+using RasStudio.Web.Components.Features.Clusters;
+using RasStudio.Web.Components.Shared.Tables;
 
 namespace RasStudio.Web.Components.Pages;
 
@@ -30,6 +32,8 @@ public partial class Infobases
     private IReadOnlyList<InfobaseRow> _items = [];
     private string? _loadError;
     private bool _loadPending;
+    private int _loadedPageNumber = 1;
+    private int _loadedPageSize = 10;
     private bool _loading;
     private bool _loadingClusters;
     private bool _loadingEndpoints;
@@ -205,7 +209,8 @@ public partial class Infobases
                 else
                     await LoadCatalogPageAsync();
 
-                UpdateUrl();
+                if (!_loadPending)
+                    UpdateUrl();
             }
             catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
             {
@@ -213,7 +218,12 @@ public partial class Infobases
             catch (Exception exception)
             {
                 Logger.LogError(exception, "Unable to load infobase shadow catalog");
-                _loadError = GetErrorMessage(exception, "Unable to load infobases from RasHub.");
+                if (!_loadPending)
+                {
+                    _pageNumber = _loadedPageNumber;
+                    _pageSize = _loadedPageSize;
+                    _loadError = GetErrorMessage(exception, "Unable to load infobases from RasHub.");
+                }
             }
             finally
             {
@@ -224,25 +234,33 @@ public partial class Infobases
 
     private async Task LoadSearchPageAsync(string query)
     {
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
+        var selectedEndpointId = _selectedEndpointId;
+        var selectedClusterId = _selectedClusterId;
         var page = await RasInfobaseService.SearchShadowPageAsync(
             query,
-            _selectedEndpointId,
-            _selectedClusterId,
-            _pageNumber,
-            _pageSize,
+            selectedEndpointId,
+            selectedClusterId,
+            pageNumber,
+            pageSize,
             _disposeToken.Token);
-        if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+        if (page.TotalPages > 0 && pageNumber > page.TotalPages)
         {
-            _pageNumber = page.TotalPages;
+            pageNumber = page.TotalPages;
             page = await RasInfobaseService.SearchShadowPageAsync(
                 query,
-                _selectedEndpointId,
-                _selectedClusterId,
-                _pageNumber,
-                _pageSize,
+                selectedEndpointId,
+                selectedClusterId,
+                pageNumber,
+                pageSize,
                 _disposeToken.Token);
         }
 
+        if (_loadPending)
+            return;
+
+        _pageNumber = page.TotalCount == 0 ? 1 : pageNumber;
         ApplyPage(
             page.Items.Select(item => new InfobaseRow(
                     item.RasEndpointId,
@@ -257,25 +275,31 @@ public partial class Infobases
 
     private async Task LoadClusterPageAsync(Guid endpointId, Guid clusterId)
     {
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
         var page = await RasInfobaseService.GetShadowPageAsync(
             endpointId,
             clusterId,
-            _pageNumber,
-            _pageSize,
+            pageNumber,
+            pageSize,
             _disposeToken.Token);
-        if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+        if (page.TotalPages > 0 && pageNumber > page.TotalPages)
         {
-            _pageNumber = page.TotalPages;
+            pageNumber = page.TotalPages;
             page = await RasInfobaseService.GetShadowPageAsync(
                 endpointId,
                 clusterId,
-                _pageNumber,
-                _pageSize,
+                pageNumber,
+                pageSize,
                 _disposeToken.Token);
         }
 
         var endpointName = SelectedEndpoint()?.Name ?? endpointId.ToString("D");
         var clusterName = SelectedCluster()?.Name ?? clusterId.ToString("D");
+        if (_loadPending)
+            return;
+
+        _pageNumber = page.TotalCount == 0 ? 1 : pageNumber;
         ApplyPage(
             page.Items.Select(infobase => new InfobaseRow(
                     endpointId,
@@ -290,74 +314,37 @@ public partial class Infobases
 
     private async Task LoadCatalogPageAsync()
     {
-        var scopes = await LoadClusterScopesAsync();
-        var requestedItemCount = checked(_pageNumber * _pageSize);
-        using var concurrency = new SemaphoreSlim(CatalogRequestConcurrency);
-        var tasks = scopes.Select(async scope =>
-        {
-            await concurrency.WaitAsync(_disposeToken.Token);
-            try
+        var pageNumber = _pageNumber;
+        var pageSize = _pageSize;
+        var sources = await LoadClusterScopesAsync();
+        var page = await CatalogPager.LoadAsync(
+            sources,
+            pageNumber,
+            pageSize,
+            async (source, number, size, cancellationToken) =>
             {
-                return await LoadCatalogSliceAsync(scope, requestedItemCount);
-            }
-            finally
-            {
-                concurrency.Release();
-            }
-        });
+                var sourcePage = await RasInfobaseService.GetShadowPageAsync(
+                    source.RasEndpointId,
+                    source.Cluster.Id,
+                    number,
+                    size,
+                    cancellationToken);
+                return new CatalogSlice<InfobaseRow>(
+                    sourcePage.Items.Select(item => new InfobaseRow(
+                            source.RasEndpointId,
+                            source.RasEndpointName,
+                            source.Cluster.Id,
+                            source.Cluster.Name,
+                            item))
+                        .ToArray(),
+                    sourcePage.TotalCount);
+            },
+            _disposeToken.Token);
+        if (_loadPending)
+            return;
 
-        var slices = await Task.WhenAll(tasks);
-        var totalCount = slices.Sum(slice => slice.TotalCount);
-        var totalPages = CalculateTotalPages(totalCount, _pageSize);
-        if (totalPages > 0 && _pageNumber > totalPages)
-            _pageNumber = totalPages;
-
-        var items = slices.SelectMany(slice => slice.Items)
-            .OrderBy(row => row.Infobase.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.RasEndpointName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.ClusterName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(row => row.RasEndpointId)
-            .ThenBy(row => row.ClusterId)
-            .ThenBy(row => row.Infobase.Id)
-            .Skip((_pageNumber - 1) * _pageSize)
-            .Take(_pageSize)
-            .ToArray();
-        ApplyPage(items, totalCount, totalPages);
-    }
-
-    private async Task<InfobaseCatalogSlice> LoadCatalogSliceAsync(
-        ClusterScope scope,
-        int requestedItemCount)
-    {
-        var infobases = new List<RasInfobase>();
-        var sourcePageSize = Math.Min(100, requestedItemCount);
-        var sourcePageCount = CalculateTotalPages(requestedItemCount, sourcePageSize);
-        var totalCount = 0;
-
-        for (var sourcePageNumber = 1; sourcePageNumber <= sourcePageCount; sourcePageNumber++)
-        {
-            var page = await RasInfobaseService.GetShadowPageAsync(
-                scope.RasEndpointId,
-                scope.Cluster.Id,
-                sourcePageNumber,
-                sourcePageSize,
-                _disposeToken.Token);
-            totalCount = page.TotalCount;
-            infobases.AddRange(page.Items);
-
-            if (sourcePageNumber >= page.TotalPages || page.Items.Count == 0)
-                break;
-        }
-
-        return new InfobaseCatalogSlice(
-            infobases.Select(infobase => new InfobaseRow(
-                    scope.RasEndpointId,
-                    scope.RasEndpointName,
-                    scope.Cluster.Id,
-                    scope.Cluster.Name,
-                    infobase))
-                .ToArray(),
-            totalCount);
+        _pageNumber = page.Page;
+        ApplyPage(page.Items, page.TotalCount, page.TotalPages);
     }
 
     private async Task<IReadOnlyList<ClusterScope>> LoadClusterScopesAsync()
@@ -381,7 +368,9 @@ public partial class Infobases
                 var clusters = await RasClusterService.GetShadowAllAsync(
                     endpoint.Id,
                     _disposeToken.Token);
-                return clusters.Select(cluster => new ClusterScope(
+                return clusters.OrderBy(cluster => cluster.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(cluster => cluster.Id)
+                    .Select(cluster => new ClusterScope(
                         endpoint.Id,
                         endpoint.Name,
                         cluster))
@@ -611,7 +600,8 @@ public partial class Infobases
 
     private async Task ReloadDataAsync()
     {
-        await LoadAsync();
+        if (!IsBusy)
+            await RetryLoadAsync();
     }
 
     private async Task RetryLoadAsync()
@@ -628,11 +618,14 @@ public partial class Infobases
             _clusters.All(cluster => cluster.Id != clusterId))
             _selectedClusterId = null;
 
-        await ReloadDataAsync();
+        if (!_disposeToken.IsCancellationRequested)
+            await LoadAsync();
     }
 
     private void ApplyPage(IReadOnlyList<InfobaseRow> items, int totalCount, int totalPages)
     {
+        _loadedPageNumber = _pageNumber;
+        _loadedPageSize = _pageSize;
         _items = items;
         _totalCount = totalCount;
         _totalPages = totalPages;
@@ -695,11 +688,6 @@ public partial class Infobases
         return _clusters.FirstOrDefault(item => item.Id == _selectedClusterId);
     }
 
-    private static int CalculateTotalPages(int totalCount, int pageSize)
-    {
-        return totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
-    }
-
     private static string FormatEndpointAddress(RasEndpoint endpoint)
     {
         return endpoint.Host.Contains(':', StringComparison.Ordinal)
@@ -747,8 +735,4 @@ public partial class Infobases
         Guid ClusterId,
         string ClusterName,
         RasInfobase Infobase);
-
-    private sealed record InfobaseCatalogSlice(
-        IReadOnlyList<InfobaseRow> Items,
-        int TotalCount);
 }

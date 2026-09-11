@@ -214,9 +214,9 @@
                     </MudTable>
 
                     <ResourceTableFooter TotalCount="@_page.TotalCount"
-                                         PageSize="@_pageSize"
+                                         PageSize="@_page.PageSize"
                                          PageSizeChanged="PageSizeChangedAsync"
-                                         PageNumber="@_pageNumber"
+                                         PageNumber="@_page.Page"
                                          PageNumberChanged="PageChangedAsync"
                                          TotalPages="@_page.TotalPages"
                                          Disabled="@(_loading || _busyGateId is not null)"/>
@@ -311,25 +311,33 @@
             {
                 _loading = true;
                 _loadError = null;
+                var pageNumber = _pageNumber;
+                var pageSize = _pageSize;
+                var search = _appliedSearch;
                 var page = await RasGateService.GetPageAsync(
-                    _pageNumber,
-                    _pageSize,
-                    _appliedSearch,
+                    pageNumber,
+                    pageSize,
+                    search,
                     SearchFields,
                     _disposeToken.Token);
 
-                if (page.TotalPages > 0 && _pageNumber > page.TotalPages)
+                if (page.TotalPages > 0 && pageNumber > page.TotalPages)
                 {
-                    _pageNumber = page.TotalPages;
+                    pageNumber = page.TotalPages;
                     page = await RasGateService.GetPageAsync(
-                        _pageNumber,
-                        _pageSize,
-                        _appliedSearch,
+                        pageNumber,
+                        pageSize,
+                        search,
                         SearchFields,
                         _disposeToken.Token);
                 }
 
-                _page = page;
+                if (_loadPending)
+                    continue;
+
+                _page = page with { Page = page.TotalCount == 0 ? 1 : page.Page };
+                _pageNumber = _page.Page;
+                _pageSize = _page.PageSize;
                 await LoadShadowStatusesAsync(page.Items);
                 Logger.LogDebug(
                     "Loaded RasGate page {Page} with {ItemCount} items of {TotalCount}",
@@ -343,7 +351,12 @@
             catch (Exception exception)
             {
                 Logger.LogError(exception, "Unable to load RasGates from RasHub");
-                _loadError = GetErrorMessage(exception, "Unable to load RasGates from RasHub.");
+                if (!_loadPending)
+                {
+                    _pageNumber = _page.Page;
+                    _pageSize = _page.PageSize;
+                    _loadError = GetErrorMessage(exception, "Unable to load RasGates from RasHub.");
+                }
             }
             finally
             {
