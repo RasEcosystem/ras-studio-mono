@@ -13,7 +13,8 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Clusters"
               Subtitle="Manage clusters through RasHub"
-              Icon="@Icons.Material.Filled.Storage">
+              Icon="@Icons.Material.Filled.Storage"
+              Class="resource-table-page">
     <HeaderActions>
         <MudStack Row Wrap="Wrap.Wrap" Spacing="2">
             <MudButton Variant="Variant.Outlined"
@@ -35,7 +36,7 @@
     <ChildContent>
         @if (!ConnectionSettings.Current.IsConfigured)
         {
-            <MudPaper Class="app-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
                 <AppEmptyState Title="Connect to RasHub"
                                Description="Configure a RasHub connection before viewing clusters."
                                Icon="@Icons.Material.Outlined.Hub">
@@ -52,7 +53,7 @@
         }
         else if (!_loadingEndpoints && _loadError is not null && _endpoints.Count == 0)
         {
-            <MudPaper Class="app-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
                 <AppEmptyState Title="Unable to load RAS endpoints"
                                Description="@_loadError"
                                Icon="@Icons.Material.Outlined.CloudOff">
@@ -69,10 +70,10 @@
         }
         else if (!_loadingEndpoints && _endpoints.Count == 0)
         {
-            <MudPaper Class="app-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
                 <AppEmptyState Title="No active RAS endpoints"
                                Description="Add an active RAS endpoint, assign it to a RasGate, then refresh its cluster shadow."
-                               Icon="@Icons.Material.Filled.Link">
+                               Icon="@AppIcons.RasEndpoint">
                     <Actions>
                         <MudButton Href="/ras-endpoints"
                                    Variant="Variant.Filled"
@@ -86,8 +87,8 @@
         }
         else
         {
-            <MudStack Spacing="3">
-                <MudPaper Class="app-card" Elevation="1">
+            <MudStack Spacing="3" Class="resource-table-layout">
+                <MudPaper Class="app-card resource-table-filters" Elevation="1">
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="5">
                             <MudSelect T="Guid?"
@@ -153,7 +154,7 @@
                     </MudAlert>
                 }
 
-                <MudPaper Class="app-card clusters-card" Elevation="1">
+                <MudPaper Class="app-card resource-table-card" Elevation="1">
                     <MudProgressLinear Indeterminate="@(_loading || _loadingEndpoints)"
                                        Color="Color.Primary"
                                        Class="@ProgressClass(_loading || _loadingEndpoints)"/>
@@ -161,6 +162,7 @@
                     <MudTable T="ClusterRow"
                               Items="@_items"
                               Hover
+                              FixedHeader
                               Elevation="0"
                               Breakpoint="Breakpoint.Md"
                               RowsPerPage="@int.MaxValue"
@@ -209,7 +211,7 @@
                                              TransformOrigin="Origin.TopRight"
                                              Disabled="@IsBusy"
                                              AriaLabel="@($"Actions for {context.Cluster.Name}")">
-                                        <MudMenuItem Icon="@Icons.Material.Outlined.TableView"
+                                        <MudMenuItem Icon="@AppIcons.Infobase"
                                                      Href="@InfobasesUrl(context)">
                                             View infobases
                                         </MudMenuItem>
@@ -248,42 +250,13 @@
                         </NoRecordsContent>
                     </MudTable>
 
-                    <MudDivider Class="my-3"/>
-
-                    <MudStack Row
-                              Wrap="Wrap.Wrap"
-                              AlignItems="AlignItems.Center"
-                              Justify="Justify.SpaceBetween"
-                              Spacing="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            @_totalCount.ToString("N0") cluster(s)
-                        </MudText>
-
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                            <MudSelect T="int"
-                                       Label="Per page"
-                                       Value="@_pageSize"
-                                       ValueChanged="PageSizeChangedAsync"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Disabled="@IsBusy">
-                                <MudSelectItem Value="10">10</MudSelectItem>
-                                <MudSelectItem Value="25">25</MudSelectItem>
-                                <MudSelectItem Value="50">50</MudSelectItem>
-                                <MudSelectItem Value="100">100</MudSelectItem>
-                            </MudSelect>
-
-                            @if (_totalPages > 1)
-                            {
-                                <MudPagination Count="@_totalPages"
-                                               Selected="@_pageNumber"
-                                               SelectedChanged="PageChangedAsync"
-                                               ShowFirstButton
-                                               ShowLastButton
-                                               Disabled="@IsBusy"/>
-                            }
-                        </MudStack>
-                    </MudStack>
+                    <ResourceTableFooter TotalCount="@_totalCount"
+                                         PageSize="@_pageSize"
+                                         PageSizeChanged="PageSizeChangedAsync"
+                                         PageNumber="@_pageNumber"
+                                         PageNumberChanged="PageChangedAsync"
+                                         TotalPages="@_totalPages"
+                                         Disabled="@IsBusy"/>
                 </MudPaper>
             </MudStack>
         }

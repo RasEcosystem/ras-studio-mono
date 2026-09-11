@@ -14,7 +14,8 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Infobases"
               Subtitle="Browse infobases through RasHub"
-              Icon="@Icons.Material.Filled.TableView">
+              Icon="@AppIcons.Infobase"
+              Class="resource-table-page">
     <HeaderActions>
         <MudStack Row Wrap="Wrap.Wrap" Spacing="1">
             <MudButton Variant="Variant.Filled"
@@ -36,7 +37,7 @@
     <ChildContent>
         @if (!ConnectionSettings.Current.IsConfigured)
         {
-            <MudPaper Class="app-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
                 <AppEmptyState Title="Connect to RasHub"
                                Description="Configure a RasHub connection before viewing infobases."
                                Icon="@Icons.Material.Outlined.Hub">
@@ -53,8 +54,8 @@
         }
         else
         {
-            <MudStack Spacing="3">
-                <MudPaper Class="app-card" Elevation="1">
+            <MudStack Spacing="3" Class="resource-table-layout">
+                <MudPaper Class="app-card resource-table-filters" Elevation="1">
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="4">
                             <MudSelect T="Guid?"
@@ -134,7 +135,7 @@
                     </MudAlert>
                 }
 
-                <MudPaper Class="app-card" Elevation="1">
+                <MudPaper Class="app-card resource-table-card" Elevation="1">
                     <MudProgressLinear Indeterminate="@(_loading || _loadingEndpoints || _loadingClusters)"
                                        Color="Color.Primary"
                                        Class="@ProgressClass(_loading || _loadingEndpoints || _loadingClusters)"/>
@@ -142,6 +143,7 @@
                     <MudTable T="InfobaseRow"
                               Items="@_items"
                               Hover
+                              FixedHeader
                               Elevation="0"
                               Breakpoint="Breakpoint.Md"
                               RowsPerPage="@int.MaxValue"
@@ -200,41 +202,17 @@
                         <NoRecordsContent>
                             <AppEmptyState Title="No infobases found"
                                            Description="Change the filters or select a cluster and synchronize its shadow from RAS."
-                                           Icon="@Icons.Material.Filled.TableView"/>
+                                           Icon="@AppIcons.Infobase"/>
                         </NoRecordsContent>
                     </MudTable>
 
-                    <MudDivider Class="my-3"/>
-
-                    <MudStack Row Wrap="Wrap.Wrap" AlignItems="AlignItems.Center"
-                              Justify="Justify.SpaceBetween" Spacing="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            @_totalCount.ToString("N0") infobase(s)
-                        </MudText>
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                            <MudSelect T="int"
-                                       Label="Per page"
-                                       Value="@_pageSize"
-                                       ValueChanged="PageSizeChangedAsync"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Disabled="@IsBusy">
-                                <MudSelectItem Value="10">10</MudSelectItem>
-                                <MudSelectItem Value="25">25</MudSelectItem>
-                                <MudSelectItem Value="50">50</MudSelectItem>
-                                <MudSelectItem Value="100">100</MudSelectItem>
-                            </MudSelect>
-                            @if (_totalPages > 1)
-                            {
-                                <MudPagination Count="@_totalPages"
-                                               Selected="@_pageNumber"
-                                               SelectedChanged="PageChangedAsync"
-                                               ShowFirstButton
-                                               ShowLastButton
-                                               Disabled="@IsBusy"/>
-                            }
-                        </MudStack>
-                    </MudStack>
+                    <ResourceTableFooter TotalCount="@_totalCount"
+                                         PageSize="@_pageSize"
+                                         PageSizeChanged="PageSizeChangedAsync"
+                                         PageNumber="@_pageNumber"
+                                         PageNumberChanged="PageChangedAsync"
+                                         TotalPages="@_totalPages"
+                                         Disabled="@IsBusy"/>
                 </MudPaper>
             </MudStack>
         }

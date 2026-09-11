@@ -80,6 +80,10 @@ h1[tabindex="-1"]:focus {
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
+.mud-alert-position {
+    align-items: center;
+}
+
 .mud-tooltip {
     background: rgba(22, 27, 38, 0.72) !important;
     border: 1px solid rgba(255, 255, 255, .05);

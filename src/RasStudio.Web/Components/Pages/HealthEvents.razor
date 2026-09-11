@@ -9,7 +9,8 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Application events"
               Subtitle="Warnings and errors retained for the current Studio process"
-              Icon="@Icons.Material.Filled.ManageSearch">
+              Icon="@Icons.Material.Filled.ManageSearch"
+              Class="resource-table-page">
     <HeaderActions>
         <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
             Warnings @WarningCount.ToString("N0")
@@ -19,17 +20,19 @@
         </MudChip>
     </HeaderActions>
     <ChildContent>
-        <MudStack Spacing="3">
-            <MudPaper Class="app-card" Elevation="1">
+        <MudStack Spacing="3" Class="resource-table-layout">
+            <MudPaper Class="app-card resource-table-filters" Elevation="1">
                 <MudGrid Spacing="2">
                     <MudItem xs="12" md="8">
                         <MudTextField T="string"
                                       @bind-Value="_searchText"
-                                      Label="Search events"
-                                      Placeholder="Message, source, trace, or exception"
+                                      Label="Search"
+                                      Placeholder="Message, source, trace, exception"
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
-                                      Adornment="Adornment.End"
+                                      Clearable
+                                      ClearIcon="@Icons.Material.Outlined.Close"
+                                      Adornment="Adornment.Start"
                                       AdornmentIcon="@Icons.Material.Outlined.Search"
                                       Immediate/>
                     </MudItem>
@@ -47,11 +50,13 @@
                 </MudGrid>
             </MudPaper>
 
-            <MudPaper Class="app-card events-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-card" Elevation="1">
                 <MudTable T="ApplicationDiagnosticEvent"
                           Items="@FilteredEvents"
                           Dense
                           Hover
+                          FixedHeader
+                          Elevation="0"
                           Breakpoint="Breakpoint.Md"
                           RowsPerPage="25">
                     <HeaderContent>

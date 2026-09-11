@@ -12,7 +12,8 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="RasGates"
               Subtitle="Manage gateway connections and inspect their status through RasHub"
-              Icon="@Icons.Material.Filled.SettingsEthernet">
+              Icon="@Icons.Material.Filled.SettingsEthernet"
+              Class="resource-table-page">
     <HeaderActions>
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
@@ -25,7 +26,7 @@
     <ChildContent>
         @if (!_connection.IsConfigured)
         {
-            <MudPaper Class="app-card" Elevation="1">
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
                 <AppEmptyState Title="Connect to RasHub"
                                Description="Configure a RasHub URL and user API key before managing gateways."
                                Icon="@Icons.Material.Outlined.Hub">
@@ -42,8 +43,8 @@
         }
         else
         {
-            <MudStack Spacing="3">
-                <MudPaper Class="app-card" Elevation="1">
+            <MudStack Spacing="3" Class="resource-table-layout">
+                <MudPaper Class="app-card resource-table-filters" Elevation="1">
                     <MudGrid Spacing="2">
                         <MudItem xs="12">
                             <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
@@ -92,7 +93,7 @@
                     </MudAlert>
                 }
 
-                <MudPaper Class="app-card ras-gates-card" Elevation="1">
+                <MudPaper Class="app-card resource-table-card" Elevation="1">
                     <MudProgressLinear Indeterminate="@_loading"
                                        Color="Color.Primary"
                                        Class="@ProgressClass(_loading)"/>
@@ -100,6 +101,7 @@
                     <MudTable T="RasGate"
                               Items="@_page.Items"
                               Hover
+                              FixedHeader
                               Elevation="0"
                               Breakpoint="Breakpoint.Md"
                               RowsPerPage="@int.MaxValue"
@@ -211,42 +213,13 @@
                         </NoRecordsContent>
                     </MudTable>
 
-                    <MudDivider Class="my-3"/>
-
-                    <MudStack Row
-                              Wrap="Wrap.Wrap"
-                              AlignItems="AlignItems.Center"
-                              Justify="Justify.SpaceBetween"
-                              Spacing="2">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            @_page.TotalCount.ToString("N0") gateway registration(s)
-                        </MudText>
-
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                            <MudSelect T="int"
-                                       Label="Per page"
-                                       Value="@_pageSize"
-                                       ValueChanged="PageSizeChangedAsync"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Disabled="@(_loading || _busyGateId is not null)">
-                                <MudSelectItem Value="10">10</MudSelectItem>
-                                <MudSelectItem Value="25">25</MudSelectItem>
-                                <MudSelectItem Value="50">50</MudSelectItem>
-                                <MudSelectItem Value="100">100</MudSelectItem>
-                            </MudSelect>
-
-                            @if (_page.TotalPages > 1)
-                            {
-                                <MudPagination Count="@_page.TotalPages"
-                                               Selected="@_pageNumber"
-                                               SelectedChanged="PageChangedAsync"
-                                               ShowFirstButton
-                                               ShowLastButton
-                                               Disabled="@(_loading || _busyGateId is not null)"/>
-                            }
-                        </MudStack>
-                    </MudStack>
+                    <ResourceTableFooter TotalCount="@_page.TotalCount"
+                                         PageSize="@_pageSize"
+                                         PageSizeChanged="PageSizeChangedAsync"
+                                         PageNumber="@_pageNumber"
+                                         PageNumberChanged="PageChangedAsync"
+                                         TotalPages="@_page.TotalPages"
+                                         Disabled="@(_loading || _busyGateId is not null)"/>
                 </MudPaper>
             </MudStack>
         }

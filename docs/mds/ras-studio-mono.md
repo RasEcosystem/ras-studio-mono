@@ -214,16 +214,29 @@ Composition:
 - `Components/AppPageShell.razor` — common page width/header/content layout.
 - `Components/AppEmptyState.razor` and `AppLoadingState.razor` — shared states.
 
+All five data-list pages share the Warden table layout through
+`wwwroot/styles/resource-tables.css`: above 960px, the table fills the remaining
+viewport height, its header stays fixed, rows scroll inside the table, and the
+pager remains at the bottom. Narrower layouts use normal page scrolling.
+Hub-backed lists use `Components/ResourceTableFooter.razor` with the Warden/Mud
+page-size selector, item range, and first/previous/next/last controls; events use
+the native `MudTablePager`. Changing the page size resets Hub lists to page one.
+
 ### Themes
 
 `Settings.razor` saves a copy of `ApplicationSettings` through
 `ISettingsProvider.UpdateAsync`. `AppThemeProvider.razor` subscribes to
 `SettingsChanged` and immediately applies the new theme.
 
-- Carbon — default dark theme.
+- Ras Ecosystem : Studio Mono (Slate) — default dark theme for new settings,
+  maintained as an independent copy of Slate.
+- Carbon — alternative dark theme.
 - Slate — alternative dark theme.
 - Light — light palette.
 - System — Light/Carbon palettes, selected through browser `matchMedia`.
+
+Existing saved theme selections retain their numeric identifiers and are
+preserved when upgrading.
 
 `AppThemeProvider.razor.js` subscribes to changes in the system color scheme and
 correctly releases the listener/module when disposed.
@@ -238,7 +251,7 @@ Direct versions:
 - generated `electron-builder` `26.15.3`;
 - `MudBlazor` `9.9.0`;
 - `Nava.Settings` `0.2.0`;
-- version source `version.json`: `0.1.0` + Nerdbank.GitVersioning; the header
+- version source `version.json`: `0.1.1` + Nerdbank.GitVersioning; the header
   derives the prerelease badge and display version from generated assembly
   metadata.
 

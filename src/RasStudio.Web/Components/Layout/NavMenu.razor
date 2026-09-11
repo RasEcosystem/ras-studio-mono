@@ -2,14 +2,12 @@
 @inject NavigationManager NavigationManager
 
 <nav class="nav-menu" aria-label="Primary navigation">
-    <MudStack AlignItems="AlignItems.Center" Spacing="1">
+    <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="nav-menu-group nav-menu-main">
         <MudTooltip Text="Home" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.Home" Href="/"
                            Color="@GetRouteColor(string.Empty)" Size="Size.Medium"
                            Variant="Variant.Text" aria-label="Home"/>
         </MudTooltip>
-
-        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
         <MudTooltip Text="RasGates" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.SettingsEthernet" Href="/ras-gates"
@@ -18,7 +16,7 @@
         </MudTooltip>
 
         <MudTooltip Text="RAS endpoints" Placement="Placement.Right" Arrow="true">
-            <MudIconButton Icon="@Icons.Material.Filled.Link" Href="/ras-endpoints"
+            <MudIconButton Icon="@AppIcons.RasEndpoint" Href="/ras-endpoints"
                            Color="@GetRouteColor("ras-endpoints")" Size="Size.Medium"
                            Variant="Variant.Text" aria-label="RAS endpoints"/>
         </MudTooltip>
@@ -30,12 +28,12 @@
         </MudTooltip>
 
         <MudTooltip Text="Infobases" Placement="Placement.Right" Arrow="true">
-            <MudIconButton Icon="@Icons.Material.Filled.TableView" Href="/infobases"
+            <MudIconButton Icon="@AppIcons.Infobase" Href="/infobases"
                            Color="@GetRouteColor("infobases")" Size="Size.Medium"
                            Variant="Variant.Text" aria-label="Infobases"/>
         </MudTooltip>
 
-        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+        <MudDivider Class="nav-menu-divider"/>
 
         <MudTooltip Text="Application events" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.ManageSearch" Href="/health-events"
@@ -45,14 +43,14 @@
 
     </MudStack>
 
-    <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="nav-menu-bottom">
-        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
-
+    <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="nav-menu-group nav-menu-bottom">
         <MudTooltip Text="Assistant" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.Chat" Href="/assistant"
                            Color="@GetRouteColor("assistant")" Size="Size.Medium"
                            Variant="Variant.Text" aria-label="Assistant"/>
         </MudTooltip>
+
+        <MudDivider Class="nav-menu-divider"/>
 
         <MudTooltip Text="Settings" Placement="Placement.Right" Arrow="true">
             <MudIconButton Icon="@Icons.Material.Filled.Settings" Href="/settings"

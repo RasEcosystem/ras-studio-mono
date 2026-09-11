@@ -51,7 +51,7 @@
     {
         var definition = ThemeProvider.GetTheme(theme);
         var lightDefinition = ThemeProvider.GetTheme(AppTheme.Light);
-        var darkDefinition = theme == AppTheme.Slate
+        var darkDefinition = definition.MudTheme.IsDarkMode
             ? definition
             : ThemeProvider.GetTheme(AppTheme.Carbon);
 

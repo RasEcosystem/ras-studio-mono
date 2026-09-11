@@ -6,7 +6,7 @@ namespace RasStudio.Application.Settings;
 [SettingsKey("app-settings")]
 public sealed class ApplicationSettings
 {
-    public AppTheme Theme { get; set; }
+    public AppTheme Theme { get; set; } = AppTheme.RasStudioMono;
 
     public string InferenceServerUrl { get; set; } = "http://127.0.0.1:11434";
 
