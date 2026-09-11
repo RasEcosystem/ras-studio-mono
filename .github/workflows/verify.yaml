@@ -9,6 +9,8 @@ on:
     branches:
       - dev
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 concurrency:
@@ -47,6 +49,11 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      - name: Install desktop test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends ripgrep xvfb xauth
+
       - name: Restore dependencies
         run: dotnet restore RasStudio.sln
 
@@ -68,3 +75,141 @@ jobs:
           --no-build
           --no-restore
           -m:1
+
+      - name: Audit Electron dependencies
+        run: make electron-audit
+
+      - name: Verify embedded MCP
+        run: make mcp-smoke CONFIGURATION=Release
+
+      - name: Verify unpackaged desktop lifecycle
+        run: xvfb-run -a env CONFIGURATION=Release tests/SmokeTests/Desktop/run-smoke.sh
+
+      - name: Build Linux package
+        run: make package-linux
+
+      - name: Audit packaged dependencies
+        run: make package-audit
+
+      - name: Verify packaged desktop lifecycle
+        run: xvfb-run -a tests/SmokeTests/Desktop/run-packaged-linux-smoke.sh
+
+      - name: Verify packaged license
+        run: cmp LICENSE artifacts/desktop/linux-x64/linux-unpacked/resources/bin/LICENSE
+
+      - name: Upload Linux package
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rasstudio-linux-x64
+          path: artifacts/desktop/linux-x64/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
+  package-windows:
+    name: Package Windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore Windows dependencies
+        run: dotnet restore src/RasStudio.Web/RasStudio.Web.csproj --runtime win-x64
+
+      - name: Build Windows packages
+        run: >-
+          dotnet publish src/RasStudio.Web/RasStudio.Web.csproj
+          --no-restore
+          -p:PublishProfile=win-x64
+
+      - name: Audit packaged dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_dir='src/RasStudio.Web/bin/Release/net10.0/win-x64/publish'
+          npm --prefix "$publish_dir/app" audit --omit=dev --audit-level=high
+          npm --prefix "$publish_dir" audit --omit=dev --audit-level=high
+
+      - name: Verify Windows packages and license
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem artifacts/desktop/win-x64/*.exe)
+          if ($packages.Count -lt 2) {
+            throw "Expected both the NSIS installer and portable executable."
+          }
+          if (-not (Test-Path artifacts/desktop/win-x64/win-unpacked/resources/bin/LICENSE)) {
+            throw "The packaged application does not contain the RasStudio license."
+          }
+
+      - name: Upload Windows packages
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rasstudio-windows-x64
+          path: artifacts/desktop/win-x64/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - verify
+      - package-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_tag="v$(jq -r '.version' version.json)"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            printf 'Release tag %s does not match version.json (%s).\n' \
+              "$GITHUB_REF_NAME" "$expected_tag" >&2
+            exit 1
+          fi
+
+      - name: Download release packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum RasStudio-* > SHA256SUMS
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          release-assets/*
+          --verify-tag
+          --generate-notes
+          --title "RasStudio Mono $GITHUB_REF_NAME"

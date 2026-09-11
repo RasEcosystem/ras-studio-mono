@@ -28,20 +28,9 @@ public sealed class RasHubConnectionSettingsService(
 
         var baseAddress = NormalizeBaseAddress(settings.BaseUrl);
 
-        try
-        {
-            var apiKey = _protector.Unprotect(settings.ProtectedApiKey);
-            return new RasHubConnection(baseAddress, apiKey);
-        }
-        catch (CryptographicException exception)
-        {
-            logger.LogWarning(
-                exception,
-                "Unable to unprotect the saved RasHub user API key");
-            throw new RasHubApiException(
-                "The saved RasHub API key cannot be decrypted. Save the connection again.",
-                innerException: exception);
-        }
+        return new RasHubConnection(
+            baseAddress,
+            UnprotectApiKey(settings.ProtectedApiKey));
     }
 
     public RasHubConnectionState Current
@@ -64,6 +53,12 @@ public sealed class RasHubConnectionSettingsService(
         var baseAddress = NormalizeBaseAddress(connection.BaseUrl);
         var current = settingsProvider.Settings;
         var protectedApiKey = current.ProtectedApiKey;
+
+        if (connection.ApiKey is null &&
+            !string.IsNullOrWhiteSpace(protectedApiKey) &&
+            !HasSameBaseAddress(current.BaseUrl, baseAddress))
+            throw new RasHubConnectionValidationException(
+                "A new RasHub API key is required when the RasHub URL changes.");
 
         if (connection.ApiKey is not null)
         {
@@ -90,6 +85,42 @@ public sealed class RasHubConnectionSettingsService(
         cancellationToken.ThrowIfCancellationRequested();
         await settingsProvider.UpdateAsync(new StoredRasHubConnectionSettings());
         logger.LogInformation("RasHub connection settings were removed");
+    }
+
+    internal RasHubConnection CreateCandidateConnection(SaveRasHubConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var baseAddress = NormalizeBaseAddress(connection.BaseUrl);
+
+        if (connection.ApiKey is not null)
+        {
+            ValidateApiKey(connection.ApiKey);
+            return new RasHubConnection(baseAddress, connection.ApiKey);
+        }
+
+        var current = settingsProvider.Settings;
+
+        if (string.IsNullOrWhiteSpace(current.ProtectedApiKey) ||
+            !HasSameBaseAddress(current.BaseUrl, baseAddress))
+            throw new RasHubConnectionValidationException(
+                "A RasHub API key is required to test this connection.");
+
+        return new RasHubConnection(
+            baseAddress,
+            UnprotectApiKey(current.ProtectedApiKey));
+    }
+
+    private static bool HasSameBaseAddress(string currentValue, Uri baseAddress)
+    {
+        try
+        {
+            return NormalizeBaseAddress(currentValue).Equals(baseAddress);
+        }
+        catch (RasHubConnectionValidationException)
+        {
+            return false;
+        }
     }
 
     private static Uri NormalizeBaseAddress(string value)
@@ -128,5 +159,22 @@ public sealed class RasHubConnectionSettingsService(
         if (value.Length > ApiKeyMaxLength)
             throw new RasHubConnectionValidationException(
                 $"RasHub API key cannot exceed {ApiKeyMaxLength} characters.");
+    }
+
+    private string UnprotectApiKey(string protectedApiKey)
+    {
+        try
+        {
+            return _protector.Unprotect(protectedApiKey);
+        }
+        catch (CryptographicException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Unable to unprotect the saved RasHub user API key");
+            throw new RasHubApiException(
+                "The saved RasHub API key cannot be decrypted. Save the connection again.",
+                innerException: exception);
+        }
     }
 }

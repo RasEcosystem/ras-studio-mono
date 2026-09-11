@@ -1,6 +1,7 @@
 @page "/"
 @implements IAsyncDisposable
 @inject IRasGateService RasGateService
+@inject IRasEndpointService RasEndpointService
 @inject IRasHubConnectionSettings ConnectionSettings
 @inject ApplicationDiagnostics Diagnostics
 @inject TimeProvider TimeProvider
@@ -9,29 +10,28 @@
 <AppPageTitle Title="Home"/>
 
 <AppPageShell Width="AppPageWidth.Wide"
-              Title="Home"
-              Subtitle="1C:Enterprise infrastructure management"
-              Icon="@Icons.Material.Filled.Home"
               Class="home-page">
     <MudStack Spacing="6">
         <div class="home-card-grid">
             <div class="home-card">
                 <MetricCard Title="Warnings"
                             Value="@Diagnostics.WarningCount.ToString("N0")"
-                            Detail="Since Studio process start"
-                            Icon="@Icons.Material.Outlined.Warning"
+                            Icon="@Icons.Material.Filled.Warning"
                             Color="Color.Warning"
                             ValueHref="/health-events?level=warnings"
-                            ValueAriaLabel="View application warnings"/>
+                            ValueAriaLabel="View application warnings"
+                            TopAccent
+                            TopAccentColor="Color.Warning"/>
             </div>
             <div class="home-card">
                 <MetricCard Title="Errors"
                             Value="@Diagnostics.ErrorCount.ToString("N0")"
-                            Detail="Since Studio process start"
-                            Icon="@Icons.Material.Outlined.ErrorOutline"
+                            Icon="@Icons.Material.Filled.Error"
                             Color="Color.Error"
                             ValueHref="/health-events?level=errors"
-                            ValueAriaLabel="View application errors"/>
+                            ValueAriaLabel="View application errors"
+                            TopAccent
+                            TopAccentColor="Color.Error"/>
             </div>
         </div>
 
@@ -39,20 +39,20 @@
             <div class="home-card">
                 <MetricCard Title="RasGates"
                             Value="@_rasGateCount"
-                            Detail="@RasGateDetail"
                             Icon="@Icons.Material.Filled.SettingsEthernet"
-                            Color="Color.Primary"
+                            Color="Color.Info"
                             ValueHref="/ras-gates"
-                            ValueAriaLabel="View RasGates"/>
+                            ValueAriaLabel="View RasGates"
+                            TopAccent/>
             </div>
             <div class="home-card">
-                <MetricCard Title="Clusters"
-                            Value="0"
-                            Detail="Discovered 1C:Enterprise clusters"
-                            Icon="@Icons.Material.Filled.Storage"
-                            Color="Color.Primary"
-                            ValueHref="/clusters"
-                            ValueAriaLabel="View clusters"/>
+                <MetricCard Title="RAS endpoints"
+                            Value="@_rasEndpointCount"
+                            Icon="@AppIcons.RasEndpoint"
+                            Color="Color.Info"
+                            ValueHref="/ras-endpoints"
+                            ValueAriaLabel="View RAS endpoints"
+                            TopAccent/>
             </div>
         </div>
     </MudStack>
@@ -62,10 +62,7 @@
     private readonly CancellationTokenSource _disposeToken = new();
     private Task _pollTask = Task.CompletedTask;
     private string _rasGateCount = "—";
-
-    private string RasGateDetail => ConnectionSettings.Current.IsConfigured
-        ? "Gateways registered in RasHub"
-        : "Connect RasHub in Settings";
+    private string _rasEndpointCount = "—";
 
     protected override async Task OnInitializedAsync()
     {
@@ -78,13 +75,19 @@
                     1,
                     cancellationToken: _disposeToken.Token);
                 _rasGateCount = page.TotalCount.ToString("N0");
+
+                var endpointPage = await RasEndpointService.GetPageAsync(
+                    1,
+                    1,
+                    _disposeToken.Token);
+                _rasEndpointCount = endpointPage.TotalCount.ToString("N0");
             }
             catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
             {
             }
             catch (Exception exception)
             {
-                Logger.LogWarning(exception, "Unable to load the RasGate dashboard count");
+                Logger.LogWarning(exception, "Unable to load RasHub dashboard counts");
             }
         }
 
@@ -98,10 +101,7 @@
         try
         {
             while (await timer.WaitForNextTickAsync(_disposeToken.Token))
-                await InvokeAsync(() =>
-                {
-                    StateHasChanged();
-                });
+                await InvokeAsync(() => { StateHasChanged(); });
         }
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {

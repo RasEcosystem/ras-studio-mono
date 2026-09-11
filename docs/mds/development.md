@@ -1,104 +1,55 @@
-# RasStudio Mono Working Guide
+# RasStudio Mono development
 
-Baseline snapshot: 2026-08-27, `dev` @ `02de6e1`. Active feature branch:
-`feature/rashub-gate-management`.
+Changes are integrated into `dev`; `main` contains reviewed release changes.
+The application version is defined in `version.json`.
 
-## Before any task
-
-```bash
-git status --short --branch
-git branch -a -vv
-git submodule status
-git ls-tree HEAD src/RasHub.Contracts
-git -C src/RasHub.Contracts status --short --branch
-git -C src/RasHub.Contracts log -1 --oneline --decorate
-```
-
-The following was the initial state when the audit began, before the new context
-files were created:
-
-```text
-superproject HEAD:                     02de6e1 (dev, origin/dev)
-recorded contracts gitlink:            53b16a5
-actual contracts checkout:             a15d1fd (detached)
-local submodule origin/main ref:        a15d1fd
-superproject status:                    M src/RasHub.Contracts
-official GitHub head, checked externally: 2f40b84
-```
-
-This is the user's initial state. Do not reset/check out or update the gitlink
-unless the task specifically calls for synchronizing contracts.
-
-## Submodule trap
-
-Dependency chain in the Makefile:
-
-```text
-make build/run/test -> restore -> submodules
-submodules -> git submodule sync + git submodule update --init --recursive
-```
-
-On `dev`, an ordinary `make build` can switch contracts from the actual
-`a15d1fd` back to the recorded `53b16a5`. Conversely,
-`make submodules-update` switches to the remote branch and leaves a dirty
-gitlink.
-
-Before running any of these commands, first decide which revision the task
-requires:
-
-- `53b16a5` — recorded revision of the current `dev`;
-- `a15d1fd` — current user checkout and the gitlink in official Studio `main`;
-- `2f40b84` — revision used by the actual current RasHub and official Contracts
-  main.
-
-If the goal is not to change contracts, it is safer to preserve the current
-checkout and use `dotnet ... --no-restore` after verifying the assets.
-
-## Prerequisites and toolchain
-
-Documented requirements:
+## Dependencies
 
 - .NET 10 SDK;
-- Node.js 22+;
-- Windows 10/11 or Linux supported by .NET/Electron;
-- GNU Make/Bash for the Makefile and tests;
-- a Chromium-compatible browser for the visual smoke test.
+- Node.js 22 or newer;
+- Windows 10/11 or a Linux distribution supported by .NET and Electron;
+- GNU Make and Bash for the build and test scripts.
 
-The following were available locally during verification:
-
-```text
-.NET SDK:       10.0.400
-Node.js:        24.13.0
-npm:            11.6.2
-visual browser: /usr/bin/google-chrome
-```
-
-`global.json`, `packages.lock.json`, `Directory.Packages.props`, a source
-`package-lock.json`, and `NuGet.config` are absent. Do not assume exact restore
-reproducibility.
-
-## Primary commands
-
-After making an explicit decision about the submodule:
+`RasHub.Contracts` is a source submodule pinned to `25b453d`, the endpoint-aware
+contract for RasHub `0.1.1`. To inspect its recorded and checked-out revisions:
 
 ```bash
-make help
+git submodule status
+git ls-tree HEAD src/RasHub.Contracts
+```
+
+`make build`, `make test`, and `make release` restore the recorded submodule
+revision. `make submodules-update` follows the configured remote branch instead;
+contract updates require a compatibility review and a commit of the new gitlink.
+
+There is no SDK pin in `global.json` or source-controlled NuGet/npm dependency
+lock file. In particular, generated Node version ranges can resolve differently
+between builds.
+
+## Build and run
+
+```bash
 make restore
 make build
 make run
-make format
-make format-check
-make test-unit
-make test-integration
-make test
-make package-linux
-make package-windows
 ```
 
-Run `make package-linux` on Linux. Run `make package-windows` on Windows (Git
-Bash), or only in an explicitly supported ElectronNET WSL scenario.
+`make run` starts the unpackaged Electron application. For the full command list,
+run `make help`.
 
-Web-only diagnostic mode, which does not start Electron:
+To build with already-restored dependencies without resetting the submodule:
+
+```bash
+dotnet build RasStudio.sln --configuration Release --no-restore -m:1
+```
+
+The Web build runs npm installation in
+`src/RasStudio.Web/bin/<Configuration>/net10.0/.electron`. This directory is
+generated output, not a source dependency lock.
+
+### Web-only diagnostic mode
+
+Use a separate settings directory to avoid changing application data:
 
 ```bash
 rasstudio_test_settings="$(mktemp -d -t rasstudio-settings-XXXXXX)"
@@ -110,159 +61,94 @@ dotnet run --no-launch-profile \
   --project src/RasStudio.Web/RasStudio.Web.csproj
 ```
 
-`APP_PATH` must point to an isolated test directory. Do not use the production
-local-data directory for tests.
+This mode starts Kestrel on `127.0.0.1:5181` without Electron. The temporary
+settings directory remains after shutdown and can be removed when no longer needed.
 
-### Build without changing the submodule
-
-If the NuGet/npm assets have already been restored and the actual checkout must
-be preserved:
+## Verification
 
 ```bash
-dotnet build RasStudio.sln \
-  --configuration Release \
-  --no-restore \
-  -m:1
+make format-check
+make dotnet-tests
+make test
 ```
 
-Building Web invokes the ElectronNET-generated npm install inside
-`src/RasStudio.Web/bin/<Configuration>/net10.0/.electron`. This is generated and
-ignored content, not a source dependency lock.
+`make test` builds Release, verifies formatting, audits generated Electron
+dependencies, and runs unit tests, Web integration tests, desktop lifecycle
+checks, and the authenticated MCP checks. Desktop tests require a display;
+Linux CI uses Xvfb.
 
-## Checks by change type
+| Change | Checks |
+|---|---|
+| Documentation | Links, file paths, and `git diff --check` |
+| Razor, CSS, or UI text | Release build, relevant Web tests, manual layout inspection |
+| Themes or settings | Web tests, isolated settings database, manual theme inspection |
+| Startup, DI, or local data | Release build, Web integration tests, desktop lifecycle |
+| Electron lifecycle or permissions | Unpackaged and packaged desktop lifecycle |
+| Packaging | Package build and artifact inspection on each target OS |
+| RasHub client or contracts | HTTP/serialization tests and integration with a compatible Hub |
 
-| Change | Minimum | Before handoff |
-|---|---|---|
-| Markdown only | Check links/paths, `git diff --check` | Review the entire docs diff |
-| Razor/CSS/copy/layout | Release build + visual smoke test | All 20 screenshots and relevant manual inspection |
-| Theme/settings | Release build + visual smoke test | Desktop smoke test, isolated settings database |
-| `Program.cs`/DI/local data | Release build | Visual + desktop smoke tests |
-| Electron hook/lifecycle | Release build + desktop smoke test | Manual packaged/unpackaged lifecycle at high risk |
-| Packaging metadata | Release build | Package on every target OS; inspect artifact contents |
-| Logging/diagnostics | Web unit tests + Web host integration test | Desktop smoke must verify rolling file and lifecycle events |
-| RasHub client/contracts | Infrastructure unit HTTP/serialization tests | RasHub Web integration compatibility + UI/desktop suites |
-
-Available scripts:
+## Packaging and releases
 
 ```bash
-tests/SmokeTests/Visual/run-screenshots.sh
-tests/SmokeTests/Desktop/run-smoke.sh
+make package-linux
+make package-windows
+make release
 ```
 
-The visual script uses fixed ports 5181..5184 and does not clear the output
-directory. It does not perform approved-baseline comparison. The desktop script
-requires Node and an environment capable of running Electron headlessly.
+Build Linux packages on Linux and Windows packages on Windows. Windows shell
+commands use Git Bash.
 
-## Initial snapshot verification results
+`make release` runs the test suite, builds the host platform's package, and
+audits its dependencies. On Linux it also checks startup and shutdown of the
+packaged AppImage. Windows produces an NSIS installer and a portable executable.
 
-Executed on 2026-08-27 with the current contracts checkout `a15d1fd`:
+The Electron package template redirects `image-size` to the local
+`ImageSizeShim`, which reads dimensions through Electron `nativeImage`.
+`make electron-audit` and `make package-audit` check the generated and packaged
+Node dependency trees. For NuGet dependencies, including transitive packages:
 
-- `dotnet build RasStudio.sln --configuration Release --no-restore -m:1`:
-  **pass**, 0 warnings, 0 errors.
-- Visual smoke test: **pass**, 18 current screenshots.
-- Desktop lifecycle smoke test: **pass**.
-- `make test` as a single command did not reach the build: the sandbox denied
-  `git submodule sync` permission to write to `.git/config`. This is an
-  environment restriction, not a compile/test failure; the three substantive
-  stages were run directly.
-
-The generated npm tree contains one vulnerable package, `image-size 1.2.1`,
-affected by two high-severity advisories; no patched version was available in
-the current audit:
-
-- direct generated `image-size <= 2.0.2`;
-- [GHSA-w3rx-r6r6-pgpr](https://github.com/advisories/GHSA-w3rx-r6r6-pgpr);
-- [GHSA-5p2g-fcmc-qvqq](https://github.com/advisories/GHSA-5p2g-fcmc-qvqq).
-
-This is a dependency of Electron packaging/runtime generation, not a file
-explicitly declared in a source `.csproj`. Do not mechanically edit the
-generated `bin` package before updating; first check a newer ElectronNET version
-or its template/dependency path.
-
-## Artifacts
-
-`artifacts/`, `bin/`, `obj/`, and `.idea/` are ignored. On the working machine,
-`artifacts` contains a mixture of current and historical outputs:
-
-- current Home/RasGates/Clusters/Settings screenshots;
-- old login/dashboard screenshots from the removed Identity version;
-- AppImages with different naming/version schemes;
-- an old web publish.
-
-Do not use them as evidence of the current architecture or the health of HEAD.
-`make clean` recursively deletes all of `artifacts`; run it only when that
-deletion is genuinely required and permitted.
-
-## Branch state
-
-`dev` and `main` diverged after `8970224`:
-
-- `dev` @ `02de6e1`: contracts gitlink `53b16a5`, `.editorconfig`
-  normalization;
-- `main` @ `97d65ae`: contracts gitlink `a15d1fd`, corrected URL
-  `ras-hub-public` -> `ras-hub`, changed ecosystem positioning.
-
-The branches are not fast-forwards of each other. During a merge, verify the
-expected gitlink transition `53b16a5 -> a15d1fd` and preserve the initial dirty
-checkout; a gitlink conflict itself is not guaranteed.
-
-## Code style and repository rules
-
-RasStudio has no `AGENTS.md`. `.editorconfig` and local conventions apply:
-
-- UTF-8, LF, final newline, 4-space indentation;
-- nullable and implicit usings enabled;
-- file-scoped namespaces preferred;
-- UI strings are currently in English;
-- use shared layout/state components instead of duplicating markup;
-- propagate cancellation tokens through future network I/O;
-- do not add secrets to tracked `appsettings*.json`, logs, exception messages,
-  or `ToString()`.
-
-Rules differ when working in neighboring repositories:
-
-- RasHub: first read `/home/zmaxb/Nextcloud/prj/RasHub/AGENTS.md`;
-- BackgroundTasks: additionally read its nested `AGENTS.md`;
-- Contracts is a compatibility-sensitive shared public surface;
-- RasGate must not acquire resource-domain logic/parsing merely for Studio's
-  convenience.
-
-## Extending the RasHub integration
-
-The following is a target proposal, not the existing dependency graph:
-
-```text
-Web UI -> Application use cases/ports
-Infrastructure HTTP adapter --implements--> Application ports
-Infrastructure HTTP adapter -> RasHub.Contracts
-Web composition root -> Application + Infrastructure
+```bash
+dotnet package list --project RasStudio.sln --include-transitive --vulnerable
 ```
 
-No concrete decision has been established in code yet. Before implementation,
-explicitly determine:
+Before publishing, commit the release changes, verify a clean worktree, and
+require successful Linux and Windows CI jobs for the release revision. Check
+the packaged application on Windows and the main operations against a compatible
+Hub/Gate deployment.
 
-1. Where and how the RasHub endpoint/profile is stored.
-2. How the user API key is protected on Windows/Linux.
-3. Who owns `HttpClient`, the auth handler, envelope/error mapping, and
-   resilience.
-4. Which contracts revision is canonical and how compatibility is verified.
-5. Which operations read shadow state and which explicitly initiate a live
-   refresh.
-6. How the UI represents an unknown remote-mutation outcome without retrying.
-7. Whether contracts should be a source submodule, versioned package, or
-   generated client.
+The release tag must match `version.json`, currently `v0.1.1`. GitHub Actions
+publishes packages and SHA-256 checksums only after both platform jobs pass.
 
-Do not start with a direct HTTP call from a `.razor` file: that would bind
-secrets, transport, and presentation into one layer.
+### Build output
 
-## Handoff checklist
+Packages are written to `artifacts/desktop`. The directories `artifacts`,
+`bin`, `obj`, and `.idea` are ignored by Git. Existing output may belong to an
+older build; release checks should use freshly built packages.
 
-- [ ] The initial dirty state has been preserved.
-- [ ] The submodule revision has not changed accidentally.
-- [ ] Implemented behavior is distinguished from target architecture.
-- [ ] Narrow checks and relevant smoke tests have passed.
-- [ ] Generated/ignored outputs have not been added to the commit.
-- [ ] `git diff --check` is clean.
-- [ ] A public contract change has been verified in both Hub and the consumer.
-- [ ] No new secrets appear in source, logs, screenshots, or error text.
-- [ ] These context files have been updated if an architectural fact changed.
+`make clean` removes all contents of `artifacts` as well as cleaning .NET
+outputs. Copy any packages that need to be retained before running it.
+
+## Code conventions
+
+`.editorconfig` defines formatting: UTF-8, LF, final newline, and four-space
+indentation. C# uses nullable reference types, implicit usings, and file-scoped
+namespaces. UI text is in English.
+
+- Shared UI belongs in `Components/Shared`; domain UI belongs in
+  `Components/Features`. See the [component guide](../../src/RasStudio.Web/Components/README.md).
+- UI code calls Application interfaces. Infrastructure owns HTTP transport,
+  authentication, error mapping, and contract conversion.
+- Network operations accept and propagate cancellation tokens.
+- Shadow reads and live refreshes are separate operations. Remote mutations are
+  not automatically retried after an unknown outcome.
+- RasHub API keys are protected before storage. Request-scoped RAC credentials
+  are not stored or included in logs.
+
+## Pull request checklist
+
+- [ ] Changes are scoped to the feature or fix.
+- [ ] Contract revisions are intentional and compatible with both Hub and Studio.
+- [ ] Relevant tests and formatting checks pass.
+- [ ] Generated output and secrets are excluded.
+- [ ] `git diff --check` passes.
+- [ ] Documentation reflects changes to APIs, settings, UI, or build behavior.

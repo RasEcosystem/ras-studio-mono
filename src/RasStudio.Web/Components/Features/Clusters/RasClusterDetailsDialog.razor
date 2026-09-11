@@ -1,0 +1,76 @@
+<MudDialog>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            @foreach (var item in Details())
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Label</MudText>
+                    <MudText Typo="Typo.body2">@item.Value</MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] [EditorRequired] public RasCluster Cluster { get; set; } = null!;
+
+    private IEnumerable<(string Label, string Value)> Details()
+    {
+        yield return ("ID", Cluster.Id.ToString("D"));
+        yield return ("Manager address", FormatAddress(Cluster));
+        yield return ("Expiration timeout", FormatSeconds(Cluster.ExpirationTimeoutSeconds));
+        yield return ("Lifetime limit", FormatSeconds(Cluster.LifetimeLimitSeconds));
+        yield return ("Maximum memory", $"{Cluster.MaxMemorySizeKb:N0} KB");
+        yield return ("Memory limit interval", FormatSeconds(Cluster.MaxMemoryTimeLimitSeconds));
+        yield return ("Security level", Cluster.SecurityLevel.ToString());
+        yield return ("Session fault tolerance", Cluster.SessionFaultToleranceLevel.ToString());
+        yield return ("Load balancing", Cluster.LoadBalancingMode.ToString());
+        yield return ("Error threshold", $"{Cluster.ErrorsCountThresholdPercent}%");
+        yield return ("Terminate problem processes", FormatBoolean(Cluster.KillProblemProcesses));
+        yield return ("Memory dump on termination", FormatBoolean(Cluster.KillByMemoryWithDump));
+        yield return ("Access-right audit events", FormatBoolean(Cluster.AllowAccessRightAuditEventsRecording));
+        yield return ("Ping period", FormatNullableSeconds(Cluster.PingPeriod));
+        yield return ("Ping timeout", FormatNullableSeconds(Cluster.PingTimeout));
+        yield return ("Restart schedule", Cluster.RestartSchedule ?? "—");
+        yield return ("Observed", Cluster.ObservedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+    }
+
+    private void Close()
+    {
+        MudDialog.Close();
+    }
+
+    private static string FormatAddress(RasCluster cluster)
+    {
+        return cluster.Host.Contains(':', StringComparison.Ordinal)
+            ? $"[{cluster.Host}]:{cluster.Port}"
+            : $"{cluster.Host}:{cluster.Port}";
+    }
+
+    private static string FormatSeconds(long value)
+    {
+        return $"{value:N0} s";
+    }
+
+    private static string FormatNullableSeconds(long? value)
+    {
+        return value is null ? "—" : FormatSeconds(value.Value);
+    }
+
+    private static string FormatBoolean(bool value)
+    {
+        return value ? "Enabled" : "Disabled";
+    }
+
+    private static string FormatBoolean(bool? value)
+    {
+        return value is null ? "—" : FormatBoolean(value.Value);
+    }
+
+}

@@ -13,7 +13,8 @@ public static class ThemeProvider
             AppTheme.Slate => SlateTheme.Create(),
             AppTheme.Light => LightTheme.Create(),
             AppTheme.System => CarbonTheme.Create(),
-            _ => CarbonTheme.Create()
+            AppTheme.RasStudioMono => RasStudioMonoTheme.Create(),
+            _ => RasStudioMonoTheme.Create()
         };
     }
 }

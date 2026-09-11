@@ -9,6 +9,23 @@
     overflow: hidden;
 }
 
-.nav-menu-bottom {
+.nav-menu ::deep .nav-menu-group {
     width: 100%;
+}
+
+.nav-menu ::deep .nav-menu-main {
+    min-height: 0;
+    overflow-y: auto;
+    flex-shrink: 1;
+}
+
+.nav-menu ::deep .nav-menu-bottom {
+    flex-shrink: 0;
+}
+
+.nav-menu ::deep .nav-menu-divider {
+    width: 32px;
+    margin: 4px auto 8px;
+    border-color: var(--mud-palette-drawer-icon);
+    opacity: 0.22;
 }

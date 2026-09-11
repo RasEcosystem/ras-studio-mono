@@ -1,15 +1,264 @@
 @page "/clusters"
+@implements IDisposable
+@inject IRasClusterService RasClusterService
+@inject IRasEndpointService RasEndpointService
+@inject IRasHubConnectionSettings ConnectionSettings
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<Clusters> Logger
+@inject NavigationManager Navigation
 
 <AppPageTitle Title="Clusters"/>
 
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Clusters"
-              Subtitle="Browse 1C:Enterprise clusters discovered by RasHub"
-              Icon="@Icons.Material.Filled.Storage">
+              Subtitle="Manage clusters through RasHub"
+              Icon="@Icons.Material.Filled.Storage"
+              Class="resource-table-page">
+    <HeaderActions>
+        <MudStack Row Wrap="Wrap.Wrap" Spacing="2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Add"
+                       Disabled="@(_endpoints.Count == 0 || IsBusy)"
+                       OnClick="AddAsync">
+                Add cluster
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Sync"
+                       Disabled="@(IsBusy || !ConnectionSettings.Current.IsConfigured)"
+                       OnClick="RefreshShadowAsync">
+                @(_refreshing ? "Refreshing all…" : "Refresh all from RAS")
+            </MudButton>
+        </MudStack>
+    </HeaderActions>
+    <ChildContent>
+        @if (!ConnectionSettings.Current.IsConfigured)
+        {
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
+                <AppEmptyState Title="Connect to RasHub"
+                               Description="Configure a RasHub connection before viewing clusters."
+                               Icon="@Icons.Material.Outlined.Hub">
+                    <Actions>
+                        <MudButton Href="/settings"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Settings">
+                            Open settings
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else if (!_loadingEndpoints && _loadError is not null && _endpoints.Count == 0)
+        {
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
+                <AppEmptyState Title="Unable to load RAS endpoints"
+                               Description="@_loadError"
+                               Icon="@Icons.Material.Outlined.CloudOff">
+                    <Actions>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Refresh"
+                                   OnClick="ReloadEndpointsAsync">
+                            Retry
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else if (!_loadingEndpoints && _endpoints.Count == 0)
+        {
+            <MudPaper Class="app-card resource-table-empty" Elevation="1">
+                <AppEmptyState Title="No active RAS endpoints"
+                               Description="Add an active RAS endpoint, assign it to a RasGate, then refresh its cluster shadow."
+                               Icon="@AppIcons.RasEndpoint">
+                    <Actions>
+                        <MudButton Href="/ras-endpoints"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Add">
+                            Manage RAS endpoints
+                        </MudButton>
+                    </Actions>
+                </AppEmptyState>
+            </MudPaper>
+        }
+        else
+        {
+            <MudStack Spacing="3" Class="resource-table-layout">
+                <MudPaper Class="app-card resource-table-filters" Elevation="1">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="5">
+                            <MudSelect T="Guid?"
+                                       Label="RAS endpoint filter"
+                                       Value="@_selectedEndpointId"
+                                       ValueChanged="EndpointChangedAsync"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Clearable
+                                       Disabled="@(IsBusy || _loadingEndpoints)">
+                                @foreach (var endpoint in _endpoints)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)endpoint.Id)">
+                                        @endpoint.Name · @FormatEndpointAddress(endpoint)
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="7">
+                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTextField T="string"
+                                              @bind-Value="_query"
+                                              Label="Search"
+                                              Placeholder="Name, manager host"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              MaxLength="200"
+                                              Immediate
+                                              DebounceInterval="350"
+                                              OnDebounceIntervalElapsed="SearchChangedAsync"
+                                              Clearable
+                                              ClearIcon="@Icons.Material.Outlined.Close"
+                                              OnClearButtonClick="ClearSearchAsync"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Outlined.Search"
+                                              AdornmentAriaLabel="Search clusters"
+                                              Disabled="@IsSearchDisabled"
+                                              Class="flex-grow-1"/>
+                                <MudTooltip Text="Reload persisted cluster shadow">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                                                   Color="Color.Primary"
+                                                   Disabled="@IsBusy"
+                                                   OnClick="ReloadDataAsync"
+                                                   aria-label="Reload cluster shadow"/>
+                                </MudTooltip>
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
 
-    <MudPaper Class="app-card" Elevation="1">
-        <AppEmptyState Title="No clusters discovered"
-                       Description="Clusters synchronized by RasHub will appear here."
-                       Icon="@Icons.Material.Filled.Storage"/>
-    </MudPaper>
+                @if (_loadError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudStack Row
+                                  AlignItems="AlignItems.Center"
+                                  Justify="Justify.SpaceBetween"
+                                  Spacing="2">
+                            <MudText Typo="Typo.body2">@_loadError</MudText>
+                            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="LoadPageAsync">
+                                Retry
+                            </MudButton>
+                        </MudStack>
+                    </MudAlert>
+                }
+
+                <MudPaper Class="app-card resource-table-card" Elevation="1">
+                    <MudProgressLinear Indeterminate="@(_loading || _loadingEndpoints)"
+                                       Color="Color.Primary"
+                                       Class="@ProgressClass(_loading || _loadingEndpoints)"/>
+
+                    <MudTable T="ClusterRow"
+                              Items="@_items"
+                              Hover
+                              FixedHeader
+                              Elevation="0"
+                              Breakpoint="Breakpoint.Md"
+                              RowsPerPage="@int.MaxValue"
+                              aria-busy="@_loading">
+                        <HeaderContent>
+                            <MudTh>Cluster</MudTh>
+                            <MudTh>RAS endpoint</MudTh>
+                            <MudTh>Manager address</MudTh>
+                            <MudTh>Load balancing</MudTh>
+                            <MudTh>Observed</MudTh>
+                            <MudTh Class="text-right">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Cluster">
+                                <MudText Typo="Typo.body2">@context.Cluster.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @context.Cluster.Id.ToString("D")
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="RAS endpoint">
+                                <MudText Typo="Typo.body2">@context.RasEndpointName</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Manager address">
+                                <MudText Typo="Typo.body2">@FormatClusterAddress(context.Cluster)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Load balancing">
+                                <MudText Typo="Typo.body2">@context.Cluster.LoadBalancingMode</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Security level @context.Cluster.SecurityLevel
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Observed">
+                                <MudText Typo="Typo.body2">@FormatTime(context.Cluster.ObservedAt)</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Actions" Class="text-right">
+                                @if (IsBusyCluster(context))
+                                {
+                                    <MudProgressCircular Indeterminate Size="Size.Small" Color="Color.Primary"/>
+                                }
+                                else
+                                {
+                                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                             Size="Size.Small"
+                                             Dense
+                                             AnchorOrigin="Origin.BottomRight"
+                                             TransformOrigin="Origin.TopRight"
+                                             Disabled="@IsBusy"
+                                             AriaLabel="@($"Actions for {context.Cluster.Name}")">
+                                        <MudMenuItem Icon="@AppIcons.Infobase"
+                                                     Href="@InfobasesUrl(context)">
+                                            View infobases
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Info"
+                                                     OnClick="@(() => ShowDetailsAsync(context.Cluster))">
+                                            Details
+                                        </MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit"
+                                                     OnClick="@(() => EditAsync(context))">
+                                            Edit
+                                        </MudMenuItem>
+                                        <MudDivider/>
+                                        <MudMenuItem Icon="@Icons.Material.Outlined.DeleteOutline"
+                                                     IconColor="Color.Error"
+                                                     OnClick="@(() => RemoveAsync(context))">
+                                            Remove
+                                        </MudMenuItem>
+                                    </MudMenu>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <AppEmptyState Title="No clusters found"
+                                           Description="Change the filters or refresh all active RAS endpoints."
+                                           Icon="@Icons.Material.Filled.Storage">
+                                <Actions>
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Outlined.Sync"
+                                               Disabled="@IsBusy"
+                                               OnClick="RefreshShadowAsync">
+                                        Refresh all from RAS
+                                    </MudButton>
+                                </Actions>
+                            </AppEmptyState>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    <ResourceTableFooter TotalCount="@_totalCount"
+                                         PageSize="@_loadedPageSize"
+                                         PageSizeChanged="PageSizeChangedAsync"
+                                         PageNumber="@_loadedPageNumber"
+                                         PageNumberChanged="PageChangedAsync"
+                                         TotalPages="@_totalPages"
+                                         Disabled="@IsBusy"/>
+                </MudPaper>
+            </MudStack>
+        }
+    </ChildContent>
 </AppPageShell>

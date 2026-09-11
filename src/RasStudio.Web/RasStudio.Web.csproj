@@ -14,12 +14,17 @@
         <Product>RasStudio Mono</Product>
         <Description>Desktop administration console for 1C:Enterprise environments</Description>
         <Company>Ras Ecosystem</Company>
-        <Copyright>Copyright © Ras Ecosystem</Copyright>
+        <Authors>Max Braun</Authors>
+        <Copyright>Copyright © 2026 Max Braun</Copyright>
         <License>MIT</License>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <ProjectUrl>https://github.com/RasEcosystem/ras-studio-mono</ProjectUrl>
+        <RepositoryUrl>https://github.com/RasEcosystem/ras-studio-mono.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
         <ElectronPackageId>com.rasecosystem.rasstudio-mono</ElectronPackageId>
         <ElectronSingleInstance>true</ElectronSingleInstance>
         <ElectronVersion>43.4.0</ElectronVersion>
-        <ElectronBuilderVersion>26.0</ElectronBuilderVersion>
+        <ElectronBuilderVersion>26.15.3</ElectronBuilderVersion>
         <ElectronIcon>Assets\rasstudio.ico</ElectronIcon>
         <ApplicationIcon>Assets\rasstudio.ico</ApplicationIcon>
     </PropertyGroup>
@@ -28,8 +33,19 @@
         <None Include=".electron\custom_main.js"
               CopyToOutputDirectory="PreserveNewest"
               TargetPath=".electron\custom_main.js"/>
+        <None Include="ElectronShims\ImageSize\index.js"
+              CopyToOutputDirectory="PreserveNewest"
+              TargetPath=".electron\ImageSizeShim\index.js"/>
+        <None Include="ElectronShims\ImageSize\manifest.json"
+              CopyToOutputDirectory="PreserveNewest"
+              TargetPath=".electron\ImageSizeShim\package.json"/>
         <None Update="Assets\rasstudio.ico" CopyToOutputDirectory="PreserveNewest"/>
         <None Update="Assets\rasstudio.png" CopyToOutputDirectory="PreserveNewest"/>
+        <None Update="Assets\rasstudio-window.png" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="..\..\LICENSE"
+              Link="LICENSE"
+              CopyToOutputDirectory="PreserveNewest"
+              CopyToPublishDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -38,6 +54,7 @@
         <PackageReference Include="HtmlSanitizer" Version="9.2.1039"/>
         <PackageReference Include="Markdig" Version="1.3.2"/>
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.9.0"/>
+        <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0"/>
         <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0"/>
         <PackageReference Include="MudBlazor" Version="9.9.0"/>
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
@@ -48,7 +65,14 @@
     <ItemGroup>
         <ProjectReference Include="..\RasStudio.Application\RasStudio.Application.csproj"/>
         <ProjectReference Include="..\RasStudio.Infrastructure\RasStudio.Infrastructure.csproj"/>
-        <ProjectReference Include="..\RasMcp\src\RasMcp\RasMcp.csproj"/>
     </ItemGroup>
+
+    <Target Name="RasStudioCreateElectronPackageJson"
+            AfterTargets="ElectronCreatePackageJson">
+        <ReplaceTemplateTask
+            TemplateFile="$(MSBuildProjectDirectory)\Properties\electron-package.template.json"
+            OutputFile="$(ElectronIntermediatePackageJson)"
+            TemplateProperties="@(TemplateProperty)"/>
+    </Target>
 
 </Project>

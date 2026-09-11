@@ -7,7 +7,13 @@
             "AppImage"
         ],
         "category": "Utility",
-        "icon": "bin/Assets/rasstudio.png"
+        "syncDesktopName": true,
+        "icon": "bin/Assets/rasstudio.png",
+        "desktop": {
+            "entry": {
+                "StartupWMClass": "com.rasecosystem.rasstudio-mono"
+            }
+        }
     },
     "win": {
         "target": [
@@ -27,9 +33,13 @@
         "icon": "bin/Assets/rasstudio.ico"
     },
     "nsis": {
+        "artifactName": "RasStudio-Mono-${version}-windows-${arch}-setup.${ext}",
         "oneClick": false,
         "allowToChangeInstallationDirectory": true,
         "createDesktopShortcut": true,
         "createStartMenuShortcut": true
+    },
+    "portable": {
+        "artifactName": "RasStudio-Mono-${version}-windows-${arch}-portable.${ext}"
     }
 }

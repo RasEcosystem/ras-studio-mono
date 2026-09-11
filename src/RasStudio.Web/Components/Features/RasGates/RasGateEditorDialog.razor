@@ -1,0 +1,196 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" ValidationDelay="0">
+            <MudStack Spacing="3">
+                <MudTextField T="string"
+                              @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Required
+                              RequiredError="Name is required"
+                              Validation="@(new Func<string?, string?>(ValidateName))"
+                              MaxLength="200"
+                              Counter="200"
+                              Immediate/>
+
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="8">
+                        <MudTextField T="string"
+                                      @bind-Value="_url"
+                                      Label="URL"
+                                      Placeholder="http://rasgate.example.net"
+                                      Variant="Variant.Outlined"
+                                      Required
+                                      RequiredError="URL is required"
+                                      Validation="@(new Func<string?, string?>(ValidateUrl))"
+                                      MaxLength="2048"
+                                      Immediate/>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int"
+                                         @bind-Value="_port"
+                                         Label="Port"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="65535"
+                                         Required/>
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField T="string"
+                              @bind-Value="_apiKey"
+                              Label="@(Gate is null ? "RasGate API key" : "New RasGate API key")"
+                              HelperText="@ApiKeyHelperText"
+                              Variant="Variant.Outlined"
+                              InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showApiKey
+                                                 ? Icons.Material.Outlined.VisibilityOff
+                                                 : Icons.Material.Outlined.Visibility)"
+                              OnAdornmentClick="ToggleApiKeyVisibility"
+                              Validation="@(new Func<string?, string?>(ValidateApiKey))"
+                              MaxLength="512"
+                              Immediate/>
+
+                <MudSwitch T="bool"
+                           @bind-Value="_isActive"
+                           Color="Color.Primary"
+                           Label="Active"/>
+
+                @if (Gate is not null)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense>
+                        RasHub never returns the stored RasGate key. Leave this field
+                        empty to keep it unchanged. Changing the Gate API address requires a
+                        new key and clears cached remote status in RasHub.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="px-4 pb-4"
+                  Style="width: 100%;">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Save"
+                       OnClick="SaveAsync">
+                @(Gate is null ? "Add RasGate" : "Save changes")
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    private static readonly string[] KnownApiKeyPlaceholders =
+    [
+        "replace-with-a-secret-api-key",
+        "replace-with-your-secret-key"
+    ];
+
+    private MudForm _form = null!;
+    private string _name = string.Empty;
+    private string _url = "http://";
+    private int _port = 5050;
+    private string? _apiKey;
+    private bool _isActive = true;
+    private bool _showApiKey;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public RasGate? Gate { get; set; }
+
+    private bool EndpointChanged => Gate is not null &&
+                                    (!string.Equals(
+                                         Gate.Url,
+                                         _url.Trim(),
+                                         StringComparison.Ordinal) ||
+                                     Gate.Port != _port);
+
+    private string ApiKeyHelperText => Gate switch
+    {
+        null => "Use the 32–512 character key configured on this RasGate instance.",
+        _ when EndpointChanged => "A new key is required because the endpoint changed.",
+        _ => "Leave empty to keep the key already stored by RasHub."
+    };
+
+    protected override void OnInitialized()
+    {
+        if (Gate is null)
+            return;
+
+        _name = Gate.Name;
+        _url = Gate.Url;
+        _port = Gate.Port;
+        _isActive = Gate.IsActive;
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        _showApiKey = !_showApiKey;
+    }
+
+    private static string? ValidateUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "URL is required";
+
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(uri.Host))
+            return "Enter an absolute HTTP or HTTPS URL";
+
+        if (!string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+            return "URL cannot contain credentials, a query, or a fragment";
+
+        return null;
+    }
+
+    private static string? ValidateName(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Name is required" : null;
+    }
+
+    private string? ValidateApiKey(string? value)
+    {
+        if ((Gate is null || EndpointChanged) && string.IsNullOrWhiteSpace(value))
+            return "RasGate API key is required";
+        if (value is null)
+            return null;
+        if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            return "API key cannot contain leading or trailing whitespace";
+        if (value.Length is < 32 or > 512)
+            return "API key must contain between 32 and 512 characters";
+        if (KnownApiKeyPlaceholders.Contains(value, StringComparer.OrdinalIgnoreCase))
+            return "Replace the documented placeholder with a secret key";
+
+        return null;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        MudDialog.Close(DialogResult.Ok(new RasGateEditorValues(
+            _name.Trim(),
+            _url.Trim(),
+            _port,
+            string.IsNullOrEmpty(_apiKey) ? null : _apiKey,
+            _isActive)));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+}

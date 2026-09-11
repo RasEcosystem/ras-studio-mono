@@ -30,7 +30,9 @@ public sealed class RasHubRasGateClientTests
 
         Assert.Equal(11, result.TotalCount);
         Assert.Equal(2, result.TotalPages);
-        Assert.Equal("Gate One", Assert.Single(result.Items).Name);
+        var gate = Assert.Single(result.Items);
+        Assert.Equal("Gate One", gate.Name);
+        Assert.Equal(7, gate.ConfigurationRevision);
         Assert.Equal(HttpMethod.Get, handler.Request!.Method);
         Assert.Equal("/root/api/v1/ras-gates?page=2&pageSize=10", handler.Request.PathAndQuery);
         Assert.Equal(UserApiKey, handler.Request.ApiKey);
@@ -110,7 +112,8 @@ public sealed class RasHubRasGateClientTests
                 "Gate One",
                 "http://gate.example",
                 5050,
-                false),
+                false,
+                7),
             TestContext.Current.CancellationToken);
         await client.DeleteAsync(id, TestContext.Current.CancellationToken);
 
@@ -130,6 +133,9 @@ public sealed class RasHubRasGateClientTests
                 Assert.Equal($"/root/api/v1/ras-gates/{id:D}", update.PathAndQuery);
                 using var json = JsonDocument.Parse(update.Body!);
                 Assert.False(json.RootElement.GetProperty("isActive").GetBoolean());
+                Assert.Equal(
+                    7,
+                    json.RootElement.GetProperty("expectedConfigurationRevision").GetInt64());
                 Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("apiKey").ValueKind);
             },
             delete =>
@@ -215,7 +221,7 @@ public sealed class RasHubRasGateClientTests
             HttpStatusCode.ServiceUnavailable,
             new { success = false, error = new { code = "hub_unavailable", message = "Unavailable" } });
         response.Headers.Add("X-Trace-Id", "trace-456");
-        var logger = new RecordingLogger<RasHubRasGateClient>();
+        var logger = new RecordingLogger<RasHubApiClient>();
         var client = CreateClient(new RecordingHandler(response), logger);
 
         await Assert.ThrowsAsync<RasHubApiException>(() =>
@@ -237,13 +243,14 @@ public sealed class RasHubRasGateClientTests
 
     private static RasHubRasGateClient CreateClient(
         RecordingHandler handler,
-        ILogger<RasHubRasGateClient>? logger = null)
+        ILogger<RasHubApiClient>? logger = null)
     {
         var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
         return new RasHubRasGateClient(
-            httpClient,
-            new StaticConnectionProvider(),
-            logger ?? NullLogger<RasHubRasGateClient>.Instance);
+            new RasHubApiClient(
+                httpClient,
+                new StaticConnectionProvider(),
+                logger ?? NullLogger<RasHubApiClient>.Instance));
     }
 
     private static HttpResponseMessage Success(
@@ -284,6 +291,7 @@ public sealed class RasHubRasGateClientTests
             url = "http://gate.example",
             port = 5050,
             isActive = true,
+            configurationRevision = 7,
             createdAt = "2026-08-27T10:00:00Z",
             updatedAt = "2026-08-27T11:00:00Z"
         };

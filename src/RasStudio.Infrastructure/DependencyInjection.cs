@@ -1,6 +1,9 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Extensions;
+using RasStudio.Application.Clusters;
+using RasStudio.Application.Infobases;
+using RasStudio.Application.RasEndpoints;
 using RasStudio.Application.RasGates;
 using RasStudio.Application.RasHub;
 using RasStudio.Infrastructure.RasHub;
@@ -19,12 +22,17 @@ public static class DependencyInjection
             provider.GetRequiredService<RasHubConnectionSettingsService>());
         services.AddScoped<IRasHubConnectionSettings>(provider =>
             provider.GetRequiredService<RasHubConnectionSettingsService>());
+        services.AddScoped<IRasHubConnectionTester, RasHubConnectionTester>();
+
+        services.AddScoped<IRasGateService, RasHubRasGateClient>();
+        services.AddScoped<IRasEndpointService, RasHubRasEndpointClient>();
+        services.AddScoped<IRasClusterService, RasHubClusterClient>();
+        services.AddScoped<IRasInfobaseService, RasHubInfobaseClient>();
+        services.AddScoped<IRasHubInfoService, RasHubInfoClient>();
 
         services
-            .AddHttpClient<IRasGateService, RasHubRasGateClient>(client =>
-            {
-                client.Timeout = TimeSpan.FromSeconds(60);
-            })
+            .AddHttpClient<RasHubApiClient>(client => { client.Timeout = TimeSpan.FromSeconds(90); })
+            .RemoveAllLoggers()
             .RedactLoggedHeaders(headerName =>
                 string.Equals(headerName, "X-Api-Key", StringComparison.OrdinalIgnoreCase))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler

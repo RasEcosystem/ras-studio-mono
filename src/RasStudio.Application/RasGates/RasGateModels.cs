@@ -6,6 +6,7 @@ public sealed record RasGate(
     string Url,
     int Port,
     bool IsActive,
+    long ConfigurationRevision,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
@@ -51,4 +52,5 @@ public sealed record UpdateRasGate(
     string Url,
     int Port,
     bool IsActive,
+    long ExpectedConfigurationRevision,
     string? ApiKey = null);

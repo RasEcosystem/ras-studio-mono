@@ -1,0 +1,373 @@
+@using System.Net
+<MudDialog Class="cluster-editor-dialog"
+           ContentClass="cluster-editor-content"
+           ActionsClass="cluster-editor-actions">
+    <DialogContent>
+        <MudForm @ref="_form" ValidationDelay="0">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle2">General</MudText>
+
+                @if (Cluster is null)
+                {
+                    <MudSelect T="Guid?"
+                               @bind-Value="_rasEndpointId"
+                               Label="RAS endpoint"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Required
+                               RequiredError="RAS endpoint is required">
+                        @foreach (var endpoint in Endpoints)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)endpoint.Id)">
+                                @endpoint.Name · @FormatEndpointAddress(endpoint)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+
+                <MudTextField T="string"
+                              @bind-Value="_name"
+                              Label="Cluster name (optional)"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              MaxLength="512"
+                              Immediate/>
+
+                @if (Cluster is null)
+                {
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="8">
+                            <MudTextField T="string"
+                                          @bind-Value="_host"
+                                          Label="Cluster manager host"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Required
+                                          RequiredError="Host is required"
+                                          Validation="@(new Func<string?, string?>(ValidateHost))"
+                                          MaxLength="512"
+                                          Immediate/>
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudNumericField T="int"
+                                             @bind-Value="_port"
+                                             Label="Manager port"
+                                             Variant="Variant.Outlined"
+                                             Margin="Margin.Dense"
+                                             Min="1"
+                                             Max="65535"
+                                             Required/>
+                        </MudItem>
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense>
+                        Manager address @FormatAddress(Cluster) cannot be changed.
+                    </MudAlert>
+                }
+
+                <MudExpansionPanels MultiExpansion
+                                    Outlined
+                                    Elevation="0"
+                                    Class="cluster-editor-panels">
+                    <MudExpansionPanel Text="Advanced settings"
+                                       Icon="@Icons.Material.Outlined.Tune"
+                                       @bind-Expanded="_advancedExpanded"
+                                       Dense>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                            @(Cluster is null
+                                ? "Leave values empty to use RAS defaults."
+                                : "Timeouts, memory limits, resilience, and load balancing.")
+                        </MudText>
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="long?"
+                                                 @bind-Value="_expirationTimeoutSeconds"
+                                                 Label="Expiration timeout, seconds"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="long?"
+                                                 @bind-Value="_lifetimeLimitSeconds"
+                                                 Label="Lifetime limit, seconds"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="long?"
+                                                 @bind-Value="_maxMemorySizeKb"
+                                                 Label="Maximum memory, KB"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="long?"
+                                                 @bind-Value="_maxMemoryTimeLimitSeconds"
+                                                 Label="Memory limit interval, seconds"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="int?"
+                                                 @bind-Value="_securityLevel"
+                                                 Label="Security level"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="int?"
+                                                 @bind-Value="_sessionFaultToleranceLevel"
+                                                 Label="Session fault tolerance"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="RasClusterLoadBalancingMode?"
+                                           @bind-Value="_loadBalancingMode"
+                                           Label="Load balancing"
+                                           Variant="Variant.Outlined"
+                                           Margin="Margin.Dense"
+                                           Clearable="@(Cluster is null)">
+                                    <MudSelectItem T="RasClusterLoadBalancingMode?"
+                                                   Value="@((RasClusterLoadBalancingMode?)RasClusterLoadBalancingMode.Performance)">
+                                        Performance
+                                    </MudSelectItem>
+                                    <MudSelectItem T="RasClusterLoadBalancingMode?"
+                                                   Value="@((RasClusterLoadBalancingMode?)RasClusterLoadBalancingMode.Memory)">
+                                        Memory
+                                    </MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="int?"
+                                                 @bind-Value="_errorsCountThresholdPercent"
+                                                 Label="Error threshold, %"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Min="0"
+                                                 Max="100"
+                                                 Clearable="@(Cluster is null)"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="bool?"
+                                           @bind-Value="_killProblemProcesses"
+                                           Label="Terminate problem processes"
+                                           Variant="Variant.Outlined"
+                                           Margin="Margin.Dense"
+                                           Clearable="@(Cluster is null)">
+                                    <MudSelectItem T="bool?" Value="@((bool?)true)">Enabled</MudSelectItem>
+                                    <MudSelectItem T="bool?" Value="@((bool?)false)">Disabled</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+                    </MudExpansionPanel>
+
+                    <MudExpansionPanel Text="RAS agent credentials"
+                                       Icon="@Icons.Material.Outlined.Key"
+                                       @bind-Expanded="_credentialsExpanded"
+                                       Dense>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                            Optional. Used only for this request and never saved by RasStudio.
+                        </MudText>
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="6">
+                                <MudTextField T="string"
+                                              @bind-Value="_agentUser"
+                                              Label="Agent user"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              MaxLength="512"/>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField T="string"
+                                              @bind-Value="_agentPassword"
+                                              Label="Agent password"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              InputType="InputType.Password"
+                                              MaxLength="512"/>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_credentialError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense Class="mt-3">
+                                @_credentialError
+                            </MudAlert>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row Justify="Justify.FlexEnd" Spacing="2" Style="width: 100%;">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Save"
+                       OnClick="SaveAsync">
+                @(Cluster is null ? "Create cluster" : "Save changes")
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm _form = null!;
+    private Guid? _rasEndpointId;
+    private string? _name;
+    private string _host = "localhost";
+    private int _port = 1541;
+    private long? _expirationTimeoutSeconds;
+    private long? _lifetimeLimitSeconds;
+    private long? _maxMemorySizeKb;
+    private long? _maxMemoryTimeLimitSeconds;
+    private int? _securityLevel;
+    private int? _sessionFaultToleranceLevel;
+    private RasClusterLoadBalancingMode? _loadBalancingMode;
+    private int? _errorsCountThresholdPercent;
+    private bool? _killProblemProcesses;
+    private string? _agentUser;
+    private string? _agentPassword;
+    private string? _credentialError;
+    private bool _advancedExpanded;
+    private bool _credentialsExpanded;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public RasCluster? Cluster { get; set; }
+
+    [Parameter] public IReadOnlyList<RasEndpoint> Endpoints { get; set; } = [];
+
+    [Parameter] public Guid? InitialRasEndpointId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _rasEndpointId = Endpoints.Any(endpoint => endpoint.Id == InitialRasEndpointId)
+            ? InitialRasEndpointId
+            : null;
+
+        if (Cluster is null)
+            return;
+
+        _name = Cluster.Name;
+        _host = Cluster.Host;
+        _port = Cluster.Port;
+        _expirationTimeoutSeconds = Cluster.ExpirationTimeoutSeconds;
+        _lifetimeLimitSeconds = Cluster.LifetimeLimitSeconds;
+        _maxMemorySizeKb = Cluster.MaxMemorySizeKb;
+        _maxMemoryTimeLimitSeconds = Cluster.MaxMemoryTimeLimitSeconds;
+        _securityLevel = Cluster.SecurityLevel;
+        _sessionFaultToleranceLevel = Cluster.SessionFaultToleranceLevel;
+        _loadBalancingMode = Cluster.LoadBalancingMode;
+        _errorsCountThresholdPercent = Cluster.ErrorsCountThresholdPercent;
+        _killProblemProcesses = Cluster.KillProblemProcesses;
+    }
+
+    private static string? ValidateHost(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Cluster manager host is required";
+
+        var candidate = value.Trim();
+        if (candidate.Length >= 2 && candidate[0] == '[' && candidate[^1] == ']')
+            candidate = candidate[1..^1];
+
+        if (IPAddress.TryParse(candidate, out _))
+            return null;
+
+        candidate = candidate.TrimEnd('.');
+        return candidate.Length is > 0 and <= 255 &&
+               Uri.CheckHostName(candidate) == UriHostNameType.Dns
+            ? null
+            : "Enter a valid DNS name or IP address";
+    }
+
+    private async Task SaveAsync()
+    {
+        _credentialError = null;
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        var user = Normalize(_agentUser);
+        var password = PreserveSecret(_agentPassword);
+        if (password is not null && user is null)
+        {
+            _credentialError = "Agent user is required when a password is provided.";
+            _credentialsExpanded = true;
+            return;
+        }
+
+        var host = Cluster is null ? NormalizeHost(_host) : null;
+        MudDialog.Close(DialogResult.Ok(new RasClusterEditorValues(
+            Cluster is null ? _rasEndpointId : null,
+            Normalize(_name),
+            host,
+            Cluster is null ? _port : null,
+            _expirationTimeoutSeconds,
+            _lifetimeLimitSeconds,
+            _maxMemorySizeKb,
+            _maxMemoryTimeLimitSeconds,
+            _securityLevel,
+            _sessionFaultToleranceLevel,
+            _loadBalancingMode,
+            _errorsCountThresholdPercent,
+            _killProblemProcesses,
+            user,
+            password)));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private static string NormalizeHost(string value)
+    {
+        var result = value.Trim();
+        return result.Length >= 2 && result[0] == '[' && result[^1] == ']'
+            ? result[1..^1]
+            : result;
+    }
+
+    private static string? Normalize(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? PreserveSecret(string? value)
+    {
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static string FormatAddress(RasCluster cluster)
+    {
+        return cluster.Host.Contains(':', StringComparison.Ordinal)
+            ? $"[{cluster.Host}]:{cluster.Port}"
+            : $"{cluster.Host}:{cluster.Port}";
+    }
+
+    private static string FormatEndpointAddress(RasEndpoint endpoint)
+    {
+        return endpoint.Host.Contains(':', StringComparison.Ordinal)
+            ? $"[{endpoint.Host}]:{endpoint.Port}"
+            : $"{endpoint.Host}:{endpoint.Port}";
+    }
+
+}

@@ -10,6 +10,10 @@ public sealed record RasHubConnectionState(string BaseUrl, bool HasApiKey)
 
 public sealed record SaveRasHubConnection(string BaseUrl, string? ApiKey);
 
+public sealed record RasHubConnectionTestResult(
+    string Version,
+    int RasGateCount);
+
 public interface IRasHubConnectionProvider
 {
     RasHubConnection GetRequiredConnection();
@@ -24,6 +28,13 @@ public interface IRasHubConnectionSettings
         CancellationToken cancellationToken = default);
 
     Task ClearAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IRasHubConnectionTester
+{
+    Task<RasHubConnectionTestResult> TestAsync(
+        SaveRasHubConnection connection,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class RasHubConnectionNotConfiguredException()

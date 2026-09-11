@@ -1,7 +1,7 @@
-# RasStudio Mono: Actual Architecture
+# RasStudio Mono architecture
 
-Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
-`feature/rashub-gate-management`; this document includes that worktree state.
+This document describes RasStudio Mono `0.1.1` and its integration with the
+RasHub `0.1.1` contract.
 
 ## Product status
 
@@ -12,7 +12,7 @@ Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
 - Local ASP.NET Core/Kestrel on a dynamic loopback port.
 - Blazor Interactive Server and a MudBlazor shell.
 - Routing, responsive layout, and error/not-found/reconnect states.
-- Carbon, Slate, Light, and System themes.
+- Studio Mono (Slate), Carbon, Slate, Light, and System themes.
 - Persistence of the selected theme through Nava.Settings in a local SQLite
   database.
 - Security headers and Electron navigation/permission hardening.
@@ -20,31 +20,46 @@ Baseline: `dev` @ `02de6e1`, 2026-08-27. Active work is on
 - The complete public RasGate API client: query, search, administration, and
   shadow/live status operations.
 - RasGate server paging/search, create/edit/delete, activate/deactivate, and
-  status UI.
+  revision-safe status UI.
+- RAS endpoint paging, query, create/edit/delete, Gate assignment, and
+  revision-safe updates through the Hub API.
+- Global and endpoint-scoped cluster browsing, search, details, synchronization,
+  creation, update, and removal through the endpoint's assigned
+  Gate.
+- Global and cluster-scoped infobase browsing, search, complete shadow
+  synchronization, and targeted live refresh.
+- A streaming AI assistant backed by an Ollama-compatible endpoint. It discovers
+  only explicitly read-only, non-destructive tools from the authenticated
+  embedded MCP endpoint.
+- MCP tools for application identity, RasHub connectivity and compatibility,
+  infrastructure inventory, recent application issues, and RasGate health.
 - RasHub-style structured diagnostics with bootstrap/fatal lifecycle logging,
   enriched HTTP events, an in-memory warning/error ring buffer, and daily
   rolling files under the application data directory.
 - An Application events page with warning/error counters, search, filtering,
   exception details, trace IDs, and polling of the current-process buffer.
 - Linux AppImage and Windows NSIS/portable packaging configuration.
-- Unit and Web integration tests, visual smoke tests, and a real headless
-  Electron lifecycle smoke test.
+- Unit and Web integration tests, MCP smoke tests, and real headless Electron
+  lifecycle smoke tests for unpackaged and packaged Linux builds.
+- GitHub Actions verification on Linux, Windows packaging verification, and
+  automatic publication of tagged Linux/Windows packages with SHA-256 checksums.
 
 ### Not implemented yet
 
-- Loading clusters or infobases.
-- Cluster/infobase CRUD, live/refresh, search, pagination, or details.
-- An infobases page.
-- CI, signing, an update feed, an SBOM, or an automated release pipeline.
+- Infobase creation, update, and removal.
+- Authenticated inference providers that require a configurable provider API
+  key.
+- Package signing, an automatic update feed, or an SBOM.
 
-Consequently, the diagram in the README currently ends here in practice:
+The primary management path is:
 
 ```text
-Electron -> loopback Kestrel -> Blazor UI -> RasHub RasGate API
-                                            -X-> cluster/infobase API
+Electron -> loopback Kestrel -> Blazor UI -> RasHub API
+                                            -> RAS endpoint
+                                            -> assigned RasGate -> RAC
 ```
 
-## Projects and actual dependencies
+## Projects and dependencies
 
 ```text
 RasStudio.Web -> RasStudio.Application
@@ -54,11 +69,11 @@ RasStudio.Infrastructure -> RasHub.Contracts
 RasStudio.Application -> Nava.Settings -> EF Core SQLite (transitive)
 ```
 
-| Project | Current contents | Start reading at |
+| Project | Contents | Entry points |
 |---|---|---|
 | `src/RasStudio.Web` | Composition root, Electron, Blazor UI, diagnostics/logging, themes, assets, and package profiles | `Program.cs`, `Infrastructure/Logging`, `Infrastructure/Diagnostics` |
-| `src/RasStudio.Application` | Settings plus RasHub/RasGate ports and application models | `Settings/ApplicationSettings.cs`, `RasGates`, `RasHub` |
-| `src/RasStudio.Infrastructure` | RasHub connection persistence, HTTP transport, contract mapping, and DI | `DependencyInjection.cs`, `RasHub/RasHubRasGateClient.cs` |
+| `src/RasStudio.Application` | Settings plus assistant, RasHub, RasGate, RAS endpoint, cluster, and infobase ports/models | `Settings`, `Assistant`, `RasGates`, `RasEndpoints`, `Clusters`, `Infobases`, `RasHub` |
+| `src/RasStudio.Infrastructure` | RasHub connection persistence, shared HTTP transport, feature clients, contract mapping, and DI | `DependencyInjection.cs`, `RasHub/RasHubApiClient.cs` |
 | `src/RasHub.Contracts` | Shared Hub wire types as a Git submodule | `src/RasHub.Contracts/src/RasHub.Contracts/RasHub.Contracts.csproj` |
 
 `RasHub.Contracts` is consumed only by Infrastructure. Web uses Application
@@ -107,8 +122,6 @@ windows have closed.
 
 `src/RasStudio.Web/.electron/custom_main.js` additionally:
 
-- acquires a single-instance lock before the normal generated Electron lock
-  logic;
 - rejects all Chromium permission requests;
 - prohibits `window.open`;
 - blocks navigation unless the URL is HTTP loopback (`127.0.0.1`, `localhost`,
@@ -149,11 +162,14 @@ retention is 14 files with 20 MiB size-based rolling.
 If `APP_PATH` is relative, `Path.GetFullPath` resolves it against the working
 directory. The environment variable name is too generic, and the `RasStudio`
 product directory may overlap with the main RasStudio implementation. The
-current runtime registers and updates only:
+current runtime registers and updates:
 
 ```text
 settings key: app-settings
-payload: ApplicationSettings { Theme }
+payload: ApplicationSettings { Theme, InferenceServerUrl, InferenceModel }
+
+settings key: rashub-connection
+payload: StoredRasHubConnectionSettings { BaseUrl, ProtectedApiKey }
 ```
 
 The RasHub user API key is protected with ASP.NET Core Data Protection before it
@@ -166,10 +182,9 @@ Configuration keys in use:
 |---|---|
 | `Desktop:DisableElectron` | Web-only diagnostic mode |
 | `Desktop:DiagnosticPort` | Loopback port for diagnostic mode |
-| `Desktop:ElectronArguments` | Additional Electron arguments; currently used only by smoke tests |
 | `Desktop:SmokeTest` | Automatic window closure |
-| `RasStudio:ThemeOverride` | Forced theme for visual capture |
 | `RasStudio:AppDataPath` | Configuration-based local-data override |
+| `Mcp:AccessToken` | Optional fixed bearer token for the loopback MCP endpoint; otherwise a random per-process token is generated |
 | `FileLogging:RetainedFileCountLimit` | Rolling log retention, validated to 1..365 |
 | `FileLogging:FileSizeLimitBytes` | File size limit, validated to 1 MiB..1 GiB |
 | `APP_PATH` | Local-data directory override |
@@ -177,13 +192,16 @@ Configuration keys in use:
 
 ## UI map
 
-| Route | File | Actual behavior |
+| Route | File | Behavior |
 |---|---|---|
-| `/` | `Components/Pages/Home.razor` | Uptime and warning/error diagnostics plus live RasGate count |
+| `/` | `Components/Pages/Home.razor` | Warning/error diagnostics plus live RasGate and RAS endpoint counts |
 | `/ras-gates` | `Components/Pages/RasGates.razor` | Complete RasGate query/search/admin/status UI through RasHub |
-| `/clusters` | `Components/Pages/Clusters.razor` | Static empty state |
+| `/ras-endpoints` | `Components/Pages/RasEndpoints.razor` | Endpoint CRUD, Gate assignment, activity, and revision conflicts |
+| `/clusters` | `Components/Pages/Clusters.razor` | Global/endpoint catalog, search, details, synchronization, create, update, and remove |
+| `/infobases` | `Components/Pages/Infobases.razor` | Global/cluster catalog, search, full synchronization, and targeted refresh |
 | `/health-events` | `Components/Pages/HealthEvents.razor` | Current-process warnings/errors, filters, traces, and exception details |
-| `/settings` | `Components/Pages/Settings.razor` | Theme and protected RasHub connection configuration |
+| `/assistant` | `Components/Pages/Assistant.razor` | Streaming chat with safe tools discovered from the embedded MCP server |
+| `/settings` | `Components/Pages/Settings.razor` | General, protected RasHub connection, and assistant endpoint/model configuration |
 | `/error` | `Components/Pages/Error.razor` | Error UI and diagnostic trace ID |
 | `/not-found` | `Components/Pages/NotFound.razor` | 404 UI |
 
@@ -192,9 +210,38 @@ Composition:
 - `Components/App.razor` — HTML document, assets, and render mode.
 - `Components/Routes.razor` — Router and `MainLayout`.
 - `Components/Layout/MainLayout.razor` — app bar, mini drawer, and providers.
-- `Components/Layout/NavMenu.razor` — Home/RasGates/Clusters/Application events/Settings.
-- `Components/AppPageShell.razor` — common page width/header/content layout.
-- `Components/AppEmptyState.razor` and `AppLoadingState.razor` — shared states.
+- `Components/Layout/NavMenu.razor` — Home/RasGates/RAS endpoints/Clusters/Infobases/Application events/Assistant/Settings.
+- `Components/Shared/Pages/AppPageShell.razor` — common page width/header/content layout.
+- `Components/Shared/States/AppEmptyState.razor` and `Components/Shared/States/AppLoadingState.razor` — shared states.
+
+All five data-list pages share the Warden table layout through
+`wwwroot/styles/resource-tables.css`: above 960px, the table fills the remaining
+viewport height, its header stays fixed, rows scroll inside the table, and the
+pager remains at the bottom. Narrower layouts use normal page scrolling.
+Hub-backed lists use `Components/Shared/Tables/ResourceTableFooter.razor` with the Warden/Mud
+page-size selector, item range, and first/previous/next/last controls; events use
+the native `MudTablePager`. Changing the page size requests page one. Rows and
+the displayed pagination are committed together after a successful load; failures
+retain the previous page and show an error. Superseded search responses are ignored.
+
+Without a search query, `Components/Shared/Tables/CatalogPager.cs` concatenates cluster sources
+by endpoint and infobase sources by endpoint/cluster. Sources are ordered by name
+and ID; rows within each source keep Hub's server order. Sorting incomplete
+server pages locally can omit or duplicate rows when database collation differs
+from the client comparer.
+The pager fetches each source's first page for its count, then only pages touching
+the requested window, with at most eight concurrent count requests. Search uses
+Hub's global search endpoints and their ordering directly.
+
+Reload refreshes active endpoints and the selected endpoint's cluster filters,
+preserving valid selections and clearing removed ones. Refresh all from RAS also
+discovers the current active endpoints before issuing live operations. Ordinary
+page navigation reads shadow data and does not trigger live refreshes.
+
+Hub currently supplies offset pagination without a shared snapshot token. A
+detected count change or incomplete source window fails the load instead of
+publishing a partial page. Concurrent updates with unchanged counts cannot be
+made snapshot-consistent by the Mono client alone.
 
 ### Themes
 
@@ -202,10 +249,15 @@ Composition:
 `ISettingsProvider.UpdateAsync`. `AppThemeProvider.razor` subscribes to
 `SettingsChanged` and immediately applies the new theme.
 
-- Carbon — default dark theme.
+- Ras Ecosystem : Studio Mono (Slate) — default dark theme for new settings,
+  maintained as an independent copy of Slate.
+- Carbon — alternative dark theme.
 - Slate — alternative dark theme.
 - Light — light palette.
 - System — Light/Carbon palettes, selected through browser `matchMedia`.
+
+Existing saved theme selections retain their numeric identifiers and are
+preserved when upgrading.
 
 `AppThemeProvider.razor.js` subscribes to changes in the system color scheme and
 correctly releases the listener/module when disposed.
@@ -217,16 +269,28 @@ Direct versions:
 - target framework `net10.0`;
 - `ElectronNET.Core` and `.AspNet` `0.5.2`;
 - generated Electron `43.4.0`;
+- generated `electron-builder` `26.15.3`;
 - `MudBlazor` `9.9.0`;
 - `Nava.Settings` `0.2.0`;
-- version source `version.json`: `0.1.0-beta.1` + Nerdbank.GitVersioning;
-  the header derives both the `BETA` prerelease badge and display version from
-  generated assembly metadata.
+- version source `version.json`: `0.1.1` + Nerdbank.GitVersioning; the header
+  derives the prerelease badge and display version from generated assembly
+  metadata.
+
+The generated package redirects ElectronNET's `image-size` dependency to the
+local `ImageSizeShim`. It reads splash dimensions through Electron
+`nativeImage`, avoiding vulnerable third-party binary image parsers in the
+shipped runtime.
 
 The Linux profile creates a self-contained x64 AppImage. The Windows profile
-creates a self-contained x64 NSIS installer and portable executable.
-`PublishTrimmed` and `PublishSingleFile` are disabled. Outputs go to
-`artifacts/desktop`.
+creates a self-contained x64 NSIS installer and portable executable. Each
+package includes the repository's MIT license. `PublishTrimmed` and
+`PublishSingleFile` are disabled. Outputs go to `artifacts/desktop`.
+
+Pushes and pull requests targeting `dev` or `main` run the Linux verification
+suite and build the Windows packages. A version tag such as `v0.1.1` must match
+`version.json`; after both platform jobs pass, GitHub Actions publishes a release
+containing the AppImage, Windows installer, portable executable, generated
+release notes, and `SHA256SUMS`.
 
 There is no `global.json`, NuGet lock file, or source-level npm lock file.
 Generated Node ranges mean that the Electron part of restore is not fully
@@ -243,50 +307,48 @@ tests/UnitTests/RasStudio.Web.UnitTests
 tests/IntegrationTests/RasStudio.Web.IntegrationTests
 tests/SmokeTests/RasStudio.McpSmoke
 tests/SmokeTests/Desktop
-tests/SmokeTests/Visual
 ```
 
 `make test` runs these steps in sequence:
 
 1. Release build;
-2. .NET unit tests;
-3. Web host integration tests;
-4. `tests/SmokeTests/Visual/run-screenshots.sh`;
+2. formatting verification;
+3. generated Electron dependency audit;
+4. .NET unit and Web host integration tests;
 5. `tests/SmokeTests/Desktop/run-smoke.sh`;
 6. `tests/SmokeTests/RasStudio.McpSmoke/run-smoke.sh`.
 
-The visual smoke test captures 20 images: Home in four themes at desktop/mobile
-sizes and all primary routes, including Application events, in Carbon. It checks for security headers and a
-difference between Light and System-dark, but it does not compare against
-approved baselines. It is therefore a smoke test, not a pixel-regression suite.
+`make release` adds host-platform packaging and packaged dependency audits.
+On Linux it also runs a lifecycle check against the built AppImage. The
+unpackaged desktop check uses a temporary manifest with `singleInstance=false`
+to isolate it from an already-running application. The production manifest is
+checked for `singleInstance=true`.
 
 The desktop smoke test checks the generated Electron config, security hook,
 PackageId, loopback console output, Socket.IO connection, creation of the
 settings database, rolling log creation, logged start/stop lifecycle, and
-coordinated Electron/backend shutdown. Some security assertions
-are static and do not prove the absence of a second listener or complete
-two-instance behavior.
+coordinated Electron/backend shutdown. The packaged Linux smoke repeats the
+critical lifecycle assertions against the built AppImage.
 
-The ignored `artifacts/` directory contains outputs from several historical
-architectures, including old dashboard/login screenshots. Do not use it as a
-map of the current code.
+The ignored `artifacts/` directory can contain output from older builds.
+Release verification uses freshly built packages.
 
 ## Change map
 
 | Task | Start with | Usually affects |
 |---|---|---|
-| New route/page | `Components/Pages`, `Layout/NavMenu.razor` | Page component, navigation, visual route list; `Routes.razor` is needed only when changing router/layout/not-found policy |
-| Shared layout/state | `AppPageShell`, `AppEmptyState`, `MainLayout` | Scoped CSS and visual smoke tests |
-| Theme | `Application/Settings`, `AppThemeProvider`, `Infrastructure/Themes` | Settings UI, system-theme JavaScript, four-theme screenshots |
-| Startup/local data | `Program.cs` | Nava DI, configuration, desktop and visual tests |
+| New route/page | `Components/Pages`, `Layout/NavMenu.razor` | Page component and navigation; `Routes.razor` is needed only when changing router/layout/not-found policy |
+| Shared layout/state | `AppPageShell`, `AppEmptyState`, `MainLayout` | Scoped CSS and affected page layouts |
+| Theme | `Application/Settings`, `AppThemeProvider`, `Infrastructure/Themes` | Settings UI and system-theme JavaScript |
+| Startup/local data | `Program.cs` | Nava DI, configuration, and desktop tests |
 | Electron security/lifecycle | `.electron/custom_main.js`, `Program.cs` | Desktop smoke test and package output |
 | Packaging | Web `.csproj`, `electron-builder.json`, `PublishProfiles` | Host-specific package build |
-| RasHub integration | Start with [RasHub context](rashub.md) and the contracts revision | Application port/model, Infrastructure client, Web DI/UI, API/serialization tests |
+| RasHub integration | [RasHub API](rashub.md) and the contracts revision | Application port/model, Infrastructure client, Web DI/UI, API/serialization tests |
+| MCP/assistant | `Infrastructure/Mcp`, `Infrastructure/Assistant`, `Components/Pages/Assistant.razor` | Tool annotations/tests, MCP smoke, provider settings, chat behavior |
 
-## Historical trap
+## Migration history
 
-Commit `8970224` migrated the project to Electron and deliberately removed the
+Commit `8970224` migrated the project to Electron and removed the
 previous ASP.NET Identity UI, EF user database, authorization services, and
-infobase/user pages. Old artifacts may contain their files and screenshots, but
-they do not describe the current runtime. Do not restore that architecture only
-because it is visible in Git history.
+infobase/user pages. The current infobase page uses RasHub; it does not depend
+on the former local user database or authorization services.

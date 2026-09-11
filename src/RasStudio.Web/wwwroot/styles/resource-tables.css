@@ -1,0 +1,54 @@
+.resource-table-page .resource-table-card,
+.resource-table-page .resource-table-empty {
+    width: 100%;
+    min-width: 0;
+}
+
+.resource-table-page .mud-table-pagination {
+    flex-shrink: 0;
+    overflow-y: hidden;
+}
+
+.resource-table-page .resource-table-filters,
+.resource-table-page .resource-table-layout > .mud-alert,
+.resource-table-page .resource-table-card > .mud-stack,
+.resource-table-page .app-table-progress {
+    flex-shrink: 0;
+}
+
+@media (min-width: 961px) {
+    .resource-table-page {
+        height: calc(100vh - 64px);
+        height: calc(100dvh - 64px);
+        overflow: hidden;
+    }
+
+    .resource-table-page .app-page-inner {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        height: 100%;
+    }
+
+    .resource-table-page .app-page-content,
+    .resource-table-page .resource-table-layout,
+    .resource-table-page .resource-table-card,
+    .resource-table-page .resource-table-card .mud-table {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .resource-table-page .resource-table-card .mud-table-container {
+        width: 100%;
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: auto;
+    }
+
+    .resource-table-page .resource-table-empty {
+        overflow: auto;
+    }
+}

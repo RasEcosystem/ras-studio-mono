@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+BUILD_CONFIGURATION="${CONFIGURATION:-Debug}"
 RUN_DIRECTORY="$(mktemp -d -t ras-studio-mcp-XXXXXX)"
 LOG_PATH="$RUN_DIRECTORY/mcp-host.log"
 ACCESS_TOKEN="rasstudio-mcp-smoke-token"
@@ -26,7 +27,11 @@ for command_name in curl dotnet rg; do
     fi
 done
 
-dotnet build "$REPOSITORY_ROOT/RasStudio.sln" --no-restore -m:1
+dotnet build \
+    "$REPOSITORY_ROOT/RasStudio.sln" \
+    --configuration "$BUILD_CONFIGURATION" \
+    --no-restore \
+    -m:1
 
 env \
     APP_PATH="$RUN_DIRECTORY/settings" \
@@ -35,6 +40,7 @@ env \
     Desktop__DiagnosticPort=0 \
     Mcp__AccessToken="$ACCESS_TOKEN" \
     dotnet run \
+        --configuration "$BUILD_CONFIGURATION" \
         --no-build \
         --no-launch-profile \
         --project "$REPOSITORY_ROOT/src/RasStudio.Web/RasStudio.Web.csproj" \
@@ -86,6 +92,7 @@ if [[ "$unauthorized_status" != "401" ]]; then
 fi
 
 dotnet run \
+    --configuration "$BUILD_CONFIGURATION" \
     --no-build \
     --no-restore \
     --project "$REPOSITORY_ROOT/tests/SmokeTests/RasStudio.McpSmoke/RasStudio.McpSmoke.csproj" \

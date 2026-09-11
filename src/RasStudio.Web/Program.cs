@@ -1,4 +1,3 @@
-using ElectronNET;
 using ElectronNET.API;
 using ElectronNET.API.Entities;
 using Microsoft.AspNetCore.DataProtection;
@@ -6,7 +5,6 @@ using Microsoft.Extensions.AI;
 using MudBlazor.Services;
 using Nava.Settings.DependencyInjection;
 using Nava.Settings.Extensions;
-using RasMcp.Extensions;
 using RasStudio.Application.Assistant;
 using RasStudio.Application.Settings;
 using RasStudio.Infrastructure;
@@ -15,6 +13,7 @@ using RasStudio.Web;
 using RasStudio.Web.Infrastructure.Assistant;
 using RasStudio.Web.Infrastructure.Diagnostics;
 using RasStudio.Web.Infrastructure.Logging;
+using RasStudio.Web.Infrastructure.Mcp;
 using Serilog;
 using Serilog.Events;
 using App = RasStudio.Web.Components.App;
@@ -97,8 +96,6 @@ try
     else
     {
         builder.Services.AddElectron();
-        ElectronNetRuntime.ElectronExtraArguments =
-            builder.Configuration["Desktop:ElectronArguments"] ?? string.Empty;
         builder.UseElectron(
             args,
             services => CreateDesktopWindowAsync(
@@ -170,6 +167,8 @@ finally
 static async Task CreateDesktopWindowAsync(IConfiguration configuration)
 {
     Electron.WindowManager.IsQuitOnWindowAllClosed = true;
+    var iconFileName = OperatingSystem.IsWindows() ? "rasstudio.ico" : "rasstudio-window.png";
+    var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", iconFileName);
 
     var options = new BrowserWindowOptions
     {
@@ -180,6 +179,7 @@ static async Task CreateDesktopWindowAsync(IConfiguration configuration)
         Center = true,
         Show = false,
         Title = "RasStudio Mono",
+        Icon = iconPath,
         IsRunningBlazor = true,
         BackgroundColor = "#20252B",
         WebPreferences = new WebPreferences { NodeIntegration = false, ContextIsolation = true, Sandbox = true }

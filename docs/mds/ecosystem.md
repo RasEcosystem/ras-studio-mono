@@ -7,10 +7,11 @@ Electron window
     |
     v
 RasStudio Mono: Kestrel on loopback + Blazor Interactive Server
-    |  user X-Api-Key; intended connection, not yet implemented
+    |  user X-Api-Key; resource calls carry RasEndpointId
     v
-RasHub: /api/v1 + PostgreSQL shadow + in-process task engine
-    |  separate X-Api-Key for the specific Gate
+RasHub: Gate registrations + RAS endpoints + PostgreSQL shadow + task engine
+    |  resolve endpoint -> assigned Gate; append endpoint host:port
+    |  separate X-Api-Key for the assigned Gate
     v
 RasGate: thin HTTP executor without a domain model or shell
     |
@@ -20,8 +21,8 @@ rac process -> RAS -> 1C:Enterprise cluster
 
 | Component | Owns | Explicitly does not own |
 |---|---|---|
-| RasStudio Mono | Desktop UX, local user settings, future RasHub client | RAC parsing, Gate secrets, authoritative infrastructure state |
-| RasHub | Users, Gate registrations, protected Gate keys, shadow state, RAC compatibility, and orchestration | Running a local `rac` process near each cluster |
+| RasStudio Mono | Desktop UX, protected Hub connection, and Hub API clients | RAC parsing, Gate secrets, authoritative infrastructure state |
+| RasHub | Users, Gate registrations, RAS endpoints and their Gate assignment, protected Gate keys, shadow state, RAC compatibility, and orchestration | Running a local `rac` process near each managed RAS endpoint |
 | RasGate | Resource-bounded, authenticated execution of `rac` argument arrays, status, and execution envelope | Cluster/infobase domain, stdout parsing, retries, and exactly-once execution |
 | RAC/RAS | Actual administration of 1C infrastructure | Hub IDs and persisted shadow state |
 
@@ -36,7 +37,7 @@ Official repositories:
 
 | Hop | Secret | Validated by | Stored in |
 |---|---|---|---|
-| Studio -> RasHub | RasHub user API key | RasHub `ApiKey` authentication scheme | Studio does not currently store it because the client is not implemented yet. In RasHub, the key is stored in the Identity DB |
+| Studio -> RasHub | RasHub user API key | RasHub `ApiKey` authentication scheme | Protected locally by Studio Data Protection; the server-side key belongs to a Hub Identity user |
 | RasHub -> RasGate | Registered Gate API key | RasGate, only for `POST /rac/execute` | Protected in RasHub using ASP.NET Data Protection; supplied to the Gate through configuration |
 
 Studio must not know the Gate API key and must not call RasGate directly.
@@ -85,8 +86,10 @@ must not automatically repeat the command.
 ## Identifiers
 
 - `RasGateModel.Id` is an internal RasHub GUID.
+- `RasEndpointModel.Id` is an internal RasHub GUID identifying one managed RAS
+  `host:port` and its current Gate assignment.
 - `ClusterModel.Id` is an external RAC cluster GUID, unique only together with
-  `RasGateId`.
+  `RasEndpointId`.
 - `InfobaseModel.Id` is an external RAC infobase GUID, unique only within its
   cluster.
 - Internal EF IDs for clusters/infobases are not exposed through public
@@ -97,13 +100,15 @@ must not be treated as a globally unique Hub ID.
 
 ## Protection Against Stale Remote Results
 
-Before network I/O, a RasHub handler records the `RasGate.ConfigurationRevision`.
-The publisher applies the result only if the Gate still exists, remains active,
-and its revision has not changed. Changing the URL, port, key, active/deleted
-state increments the revision. URL/port/key changes, deletion/restoration, and
-deactivation also clear the corresponding observations/derived shadow;
-reactivation by itself does not clear them again. This prevents a slow response
-from an old configuration from restoring stale data.
+Before resource network I/O, a RasHub handler records both the
+`RasEndpoint.ConfigurationRevision` and the assigned
+`RasGate.ConfigurationRevision`. Publication succeeds only while both execution
+guards remain current and active. Gate URL/port/key/status changes advance the
+Gate revision. Endpoint address, Gate assignment, name, status, and deletion
+changes advance the endpoint revision. Changing the endpoint's RAS identity or
+deactivating/deleting it invalidates its derived shadow; changing only its Gate
+assignment preserves shadow identity while preventing an in-flight result from
+the old assignment from publishing.
 
 ## Compatibility Boundaries
 
@@ -118,29 +123,20 @@ from an old configuration from restoring stale data.
 - Hub <-> Gate transport DTOs are private to RasHub Infrastructure and duplicate
   a small RasGate JSON contract; Hub and Gate do not share an assembly.
 
-## Repository Snapshot
+## Repository Compatibility Snapshot
 
-Checked on 2026-08-27. No `fetch`/`pull` was performed; official heads were also
-verified through the GitHub API. The table records the pre-task baseline before
-new untracked context files appeared in `docs`; those files are intentionally
-excluded from the working-state column.
+The following compatibility points were recorded on 2026-09-05 for RasStudio
+`0.1.0`. This is a historical reference, not a list of current repository heads.
+The Studio application version is maintained in `version.json`.
 
-| Repository / checkout | Local state | Official head | Important difference |
+| Repository | Studio compatibility point | Official state | Notes |
 |---|---|---|---|
-| `RasStudio` | pre-task: `dev` @ `02de6e1`, dirty only because of the submodule | `dev` @ `02de6e1`; default `main` @ `97d65ae` | `main` corrects positioning, the RasHub URL, and the gitlink; the branches have diverged |
-| `RasStudio/src/RasHub.Contracts` | detached `a15d1fd`; superproject records `53b16a5` | `main` @ `2f40b84` | The checkout is ahead of the gitlink but behind official head by docs/format-only commits |
-| `RasHub` | clean `dev` @ `cbe8881` | `dev` @ `cbe8881`; `main` @ `86d4f93` | The application tree matches; `main` additionally permits manual release-workflow dispatch |
-| `RasHub/src/RasHub.Contracts` | clean `2f40b84` | `main` @ `2f40b84` | This is the contract revision used by the actual current Hub |
-| standalone `RasHub.Contracts` | clean `main` @ `12e38ef` | `main` @ `2f40b84` | Behind by one formatting-only commit |
-| `RasGate` | clean `main` @ `8582a31` | `main` @ `8582a31` | Code matches release `v0.2.1`; only a docs commit is on top |
+| `RasStudio` | `dev`, version `0.1.0` | release candidate | Uses the endpoint-aware Hub API |
+| `RasStudio/src/RasHub.Contracts` | pinned gitlink `25b453d` | `main` @ `25b453d` | Adds `RasEndpoint` and endpoint-owned resource context |
+| `RasHub` | `0.1.1` | `main` @ `7e3cc15`, release `v0.1.1` | Provides RAS endpoints and resource operations |
+| `RasGate` | HTTP execution contract from `0.2.1` | `main` @ `8582a31`, release `v0.2.1` | Remains the thin command executor |
 
-Local paths to neighboring repositories:
-
-- `/home/zmaxb/Nextcloud/prj/RasHub`
-- `/home/zmaxb/Nextcloud/prj/RasHub.Contracts`
-- `/home/zmaxb/Nextcloud/prj/RasGate`
-
-## System Constraints to Keep in Mind
+## System constraints
 
 - RasHub BackgroundTasks, deduplication, schedules, and concurrency keys exist
   only in one process's memory. The current production topology is one replica.
